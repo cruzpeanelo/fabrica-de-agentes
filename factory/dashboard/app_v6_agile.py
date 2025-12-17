@@ -54,6 +54,14 @@ from factory.database.repositories import (
     EpicRepository, SprintRepository
 )
 
+# Claude AI Integration
+try:
+    from factory.ai.claude_integration import ClaudeClient, get_claude_client
+    HAS_CLAUDE = True
+except ImportError:
+    HAS_CLAUDE = False
+    print("[Dashboard] Claude integration not available")
+
 # Criar tabelas
 Base.metadata.create_all(bind=engine)
 
@@ -491,310 +499,269 @@ def extract_story_id(text: str) -> Optional[str]:
 
 def format_story_details(story) -> str:
     """Formata detalhes completos de uma story"""
-    # Narrativa Agile
     narrative = ""
     if story.persona:
-        narrative += f"**Como** {story.persona}\n"
+        narrative += f"Como {story.persona}\n"
     if story.action:
-        narrative += f"**Eu quero** {story.action}\n"
+        narrative += f"Eu quero {story.action}\n"
     if story.benefit:
-        narrative += f"**Para que** {story.benefit}\n"
+        narrative += f"Para que {story.benefit}\n"
 
-    # Criterios de aceite
     criteria = ""
     if story.acceptance_criteria:
         criteria = "\n".join([f"- {c}" for c in story.acceptance_criteria])
 
-    # Definition of Done
     dod = ""
     if story.definition_of_done:
         dod = "\n".join([f"- {d}" for d in story.definition_of_done])
 
-    # Tasks
     tasks_info = ""
     if story.story_tasks:
         tasks_info = "\n".join([
-            f"- **{t.task_id}**: {t.title} [{t.status}]"
+            f"- {t.task_id}: {t.title} [{t.status}]"
             for t in story.story_tasks
         ])
 
-    return f"""## {story.story_id}: {story.title}
+    return f"""Story: {story.story_id} - {story.title}
+Status: {story.status} | Pontos: {story.story_points} pts | Complexidade: {story.complexity}
+Categoria: {story.category} | Prioridade: {story.priority}
 
-**Status:** {story.status} | **Pontos:** {story.story_points} pts | **Complexidade:** {story.complexity}
-**Categoria:** {story.category} | **Prioridade:** {story.priority}
+Narrativa:
+{narrative if narrative else 'Nao definida'}
 
-### Narrativa
-{narrative if narrative else '_Nao definida_'}
+Descricao: {story.description or 'Sem descricao'}
 
-### Descricao
-{story.description or '_Sem descricao_'}
+Criterios de Aceite:
+{criteria if criteria else 'Nenhum criterio definido'}
 
-### Criterios de Aceite
-{criteria if criteria else '_Nenhum criterio definido_'}
+Definition of Done:
+{dod if dod else 'Nenhum DoD definido'}
 
-### Definition of Done
-{dod if dod else '_Nenhum DoD definido_'}
+Tasks ({story.tasks_completed}/{story.tasks_total}):
+{tasks_info if tasks_info else 'Nenhuma task'}
 
-### Tasks ({story.tasks_completed}/{story.tasks_total})
-{tasks_info if tasks_info else '_Nenhuma task_'}
+Notas Tecnicas: {story.technical_notes or 'Sem notas'}"""
 
-### Notas Tecnicas
-{story.technical_notes or '_Sem notas_'}"""
+
+def get_project_context(db, project_id: str = None) -> str:
+    """Obtem contexto completo do projeto para o Claude"""
+    story_repo = StoryRepository(db)
+
+    if project_id:
+        stories = story_repo.get_by_project(project_id)
+    else:
+        stories = story_repo.get_all()
+
+    if not stories:
+        return "Nao ha stories cadastradas no projeto."
+
+    # Resumo do projeto
+    total = len(stories)
+    by_status = {}
+    total_points = 0
+    done_points = 0
+
+    for s in stories:
+        by_status[s.status] = by_status.get(s.status, 0) + 1
+        total_points += s.story_points or 0
+        if s.status == 'done':
+            done_points += s.story_points or 0
+
+    context = f"""CONTEXTO DO PROJETO:
+Total de Stories: {total}
+Pontos totais: {total_points} | Concluidos: {done_points}
+Por status: {by_status}
+
+LISTA DE STORIES:
+"""
+    for s in stories:
+        context += f"\n- {s.story_id}: {s.title} [{s.status}] ({s.story_points} pts)"
+        if s.persona:
+            context += f"\n  Narrativa: Como {s.persona}, eu quero {s.action or '...'}, para que {s.benefit or '...'}"
+
+    return context
+
+
+def execute_assistant_action(action: dict, db) -> str:
+    """Executa uma acao determinada pelo assistente"""
+    story_repo = StoryRepository(db)
+    action_type = action.get("action")
+    result = ""
+
+    if action_type == "move_story":
+        story_id = action.get("story_id")
+        new_status = action.get("status")
+        if story_id and new_status:
+            story = story_repo.get_by_id(story_id)
+            if story:
+                story_repo.move_story(story_id, new_status)
+                result = f"Story {story_id} movida para {new_status}"
+
+    elif action_type == "get_story_details":
+        story_id = action.get("story_id")
+        if story_id:
+            story = story_repo.get_by_id(story_id)
+            if story:
+                result = format_story_details(story)
+
+    elif action_type == "list_stories":
+        stories = story_repo.get_all()
+        if stories:
+            result = "\n".join([f"- {s.story_id}: {s.title} [{s.status}] ({s.story_points} pts)" for s in stories])
+
+    elif action_type == "update_story":
+        story_id = action.get("story_id")
+        updates = action.get("updates", {})
+        if story_id and updates:
+            story_repo.update(story_id, updates)
+            result = f"Story {story_id} atualizada"
+
+    return result
 
 
 def generate_assistant_response(content: str, project_id: str, story_id: str, db) -> dict:
-    """Gera resposta do assistente baseada na mensagem - versao inteligente"""
-    content_lower = content.lower()
+    """Gera resposta do assistente usando Claude AI"""
+    import json as json_module
+
     story_repo = StoryRepository(db)
-    actions = []
+    actions_executed = []
 
     # =========================================================================
-    # 1. DETALHES DE STORY
+    # USAR CLAUDE AI SE DISPONIVEL
     # =========================================================================
-    if any(word in content_lower for word in ['detalhe', 'detalhes', 'info', 'mostrar', 'exibir', 'sobre']):
-        # Tentar extrair ID da mensagem
+    if HAS_CLAUDE:
+        try:
+            claude = get_claude_client()
+
+            if claude.is_available():
+                # Obter contexto do projeto
+                project_context = get_project_context(db, project_id)
+
+                # Obter detalhes da story atual se especificada
+                current_story_context = ""
+                if story_id:
+                    story = story_repo.get_by_id(story_id)
+                    if story:
+                        current_story_context = f"\n\nSTORY ATUAL EM FOCO:\n{format_story_details(story)}"
+
+                # System prompt para o assistente
+                system_prompt = f"""Voce e o Assistente Inteligente da Fabrica de Agentes, um sistema de gestao Agile.
+Seu papel e ajudar usuarios a gerenciar User Stories, Tasks e o desenvolvimento de projetos.
+
+SUAS CAPACIDADES:
+1. Responder perguntas sobre stories, tasks e o projeto
+2. Executar acoes como mover stories, listar informacoes, atualizar dados
+3. Analisar documentos e arquivos anexados
+4. Sugerir melhorias e boas praticas Agile
+
+ACOES DISPONIVEIS (responda com JSON quando quiser executar):
+- {{"action": "move_story", "story_id": "STR-XXXX", "status": "ready|in_progress|testing|done"}}
+- {{"action": "get_story_details", "story_id": "STR-XXXX"}}
+- {{"action": "list_stories"}}
+- {{"action": "update_story", "story_id": "STR-XXXX", "updates": {{"title": "...", "story_points": N}}}}
+
+FORMATO DE RESPOSTA:
+- Responda de forma clara e util em portugues
+- Se precisar executar uma acao, inclua o JSON da acao NO FINAL da resposta, entre marcadores <action> e </action>
+- Exemplo: "Vou mover a story para Ready. <action>{{"action": "move_story", "story_id": "STR-0001", "status": "ready"}}</action>"
+
+{project_context}
+{current_story_context}
+
+IMPORTANTE:
+- Seja proativo e execute acoes quando o usuario pedir
+- Forneca detalhes completos quando perguntado sobre stories
+- Use os dados reais do projeto listados acima"""
+
+                # Chamar Claude
+                response = claude.chat(
+                    message=content,
+                    system_prompt=system_prompt,
+                    max_tokens=2048
+                )
+
+                if response.success:
+                    response_text = response.content
+
+                    # Extrair e executar acoes do response
+                    import re
+                    action_matches = re.findall(r'<action>(.*?)</action>', response_text, re.DOTALL)
+
+                    for action_json in action_matches:
+                        try:
+                            action = json_module.loads(action_json.strip())
+                            result = execute_assistant_action(action, db)
+                            if result:
+                                actions_executed.append({
+                                    "type": action.get("action"),
+                                    "result": result
+                                })
+                        except json_module.JSONDecodeError:
+                            pass
+
+                    # Limpar tags de acao da resposta
+                    clean_response = re.sub(r'<action>.*?</action>', '', response_text, flags=re.DOTALL).strip()
+
+                    # Se executou acoes, adicionar resultado
+                    if actions_executed:
+                        action_results = "\n".join([f"✓ {a['type']}: {a['result']}" for a in actions_executed])
+                        clean_response += f"\n\n**Acoes executadas:**\n{action_results}"
+
+                    return {
+                        "content": clean_response,
+                        "actions": actions_executed
+                    }
+                else:
+                    # Fallback se Claude falhar
+                    print(f"[Assistant] Claude error: {response.error}")
+
+        except Exception as e:
+            print(f"[Assistant] Exception: {str(e)}")
+
+    # =========================================================================
+    # FALLBACK: RESPOSTAS BASEADAS EM REGRAS (se Claude nao disponivel)
+    # =========================================================================
+    content_lower = content.lower()
+
+    # Detalhes de story
+    if any(word in content_lower for word in ['detalhe', 'detalhes', 'info', 'sobre']):
         mentioned_id = extract_story_id(content)
         target_id = mentioned_id or story_id
-
         if target_id:
             story = story_repo.get_by_id(target_id)
             if story:
                 return {
-                    "content": format_story_details(story),
+                    "content": f"**{story.story_id}: {story.title}**\n\n{format_story_details(story)}",
                     "actions": [{"type": "show_story", "story_id": target_id}]
                 }
-            else:
-                return {
-                    "content": f"Nao encontrei a story {target_id}. Verifique se o ID esta correto.",
-                    "actions": []
-                }
-        else:
-            # Listar stories disponiveis
-            stories = story_repo.get_all()[:10]
-            stories_list = "\n".join([f"- **{s.story_id}**: {s.title}" for s in stories])
-            return {
-                "content": f"Qual story voce gostaria de ver? Aqui estao as disponiveis:\n\n{stories_list}\n\nDigite: 'detalhes STR-XXXX'",
-                "actions": []
-            }
 
-    # =========================================================================
-    # 2. MOVER STORY
-    # =========================================================================
-    if any(word in content_lower for word in ['mover', 'mova', 'move', 'passar', 'mudar status']):
+    # Mover story
+    if any(word in content_lower for word in ['mover', 'mova', 'move']):
         mentioned_id = extract_story_id(content)
-        target_id = mentioned_id or story_id
-
-        # Detectar status destino
-        status_map = {
-            'backlog': StoryStatus.BACKLOG.value,
-            'ready': StoryStatus.READY.value,
-            'in_progress': StoryStatus.IN_PROGRESS.value,
-            'in progress': StoryStatus.IN_PROGRESS.value,
-            'em progresso': StoryStatus.IN_PROGRESS.value,
-            'review': StoryStatus.REVIEW.value,
-            'revisao': StoryStatus.REVIEW.value,
-            'testing': StoryStatus.TESTING.value,
-            'teste': StoryStatus.TESTING.value,
-            'done': StoryStatus.DONE.value,
-            'concluida': StoryStatus.DONE.value,
-            'pronto': StoryStatus.READY.value,
-            'pronta': StoryStatus.READY.value
-        }
-
+        status_map = {'ready': 'ready', 'backlog': 'backlog', 'in_progress': 'in_progress',
+                      'testing': 'testing', 'done': 'done', 'pronto': 'ready', 'pronta': 'ready'}
         new_status = None
         for key, value in status_map.items():
             if key in content_lower:
                 new_status = value
                 break
-
-        if target_id and new_status:
-            story = story_repo.get_by_id(target_id)
-            if story:
-                story_repo.move_story(target_id, new_status)
-                return {
-                    "content": f"Story **{target_id}** movida para **{new_status}** com sucesso!",
-                    "actions": [{"type": "move_story", "story_id": target_id, "status": new_status}]
-                }
-            else:
-                return {
-                    "content": f"Nao encontrei a story {target_id}.",
-                    "actions": []
-                }
-        elif target_id:
+        if mentioned_id and new_status:
+            story_repo.move_story(mentioned_id, new_status)
             return {
-                "content": f"Para onde voce quer mover a story {target_id}?\n\nOpcoes: **backlog**, **ready**, **in_progress**, **review**, **testing**, **done**",
-                "actions": []
-            }
-        else:
-            return {
-                "content": "Qual story voce quer mover? Diga: 'mover STR-XXXX para ready'",
-                "actions": []
+                "content": f"Story **{mentioned_id}** movida para **{new_status}**!",
+                "actions": [{"type": "move_story", "story_id": mentioned_id, "status": new_status}]
             }
 
-    # =========================================================================
-    # 3. EDITAR STORY
-    # =========================================================================
-    if any(word in content_lower for word in ['editar', 'edite', 'alterar', 'modificar', 'atualizar']):
-        mentioned_id = extract_story_id(content)
-        target_id = mentioned_id or story_id
-
-        if target_id:
-            story = story_repo.get_by_id(target_id)
-            if story:
-                # Detectar o que editar
-                if 'titulo' in content_lower or 'title' in content_lower:
-                    return {
-                        "content": f"Para editar o titulo da story {target_id}, clique nela no Kanban e edite no painel lateral. Ou me diga o novo titulo: 'editar titulo {target_id}: Novo Titulo'",
-                        "actions": [{"type": "open_story", "story_id": target_id}]
-                    }
-                elif 'ponto' in content_lower or 'story point' in content_lower:
-                    return {
-                        "content": f"Qual o novo valor de Story Points para {target_id}? (1, 2, 3, 5, 8, 13)",
-                        "actions": []
-                    }
-                elif 'prioridade' in content_lower:
-                    return {
-                        "content": f"Qual a nova prioridade para {target_id}? (low, medium, high, urgent)",
-                        "actions": []
-                    }
-                else:
-                    return {
-                        "content": f"Abrindo story **{target_id}** para edicao. Voce pode editar:\n- **Titulo**: 'editar titulo {target_id}: Novo Nome'\n- **Pontos**: 'editar pontos {target_id}: 5'\n- **Prioridade**: 'editar prioridade {target_id}: high'\n- **Descricao, criterios, DoD**: Clique na story no Kanban",
-                        "actions": [{"type": "open_story", "story_id": target_id}]
-                    }
-        else:
-            return {
-                "content": "Qual story voce quer editar? Diga: 'editar STR-XXXX'",
-                "actions": []
-            }
-
-    # =========================================================================
-    # 4. LISTAR STORIES
-    # =========================================================================
-    if any(word in content_lower for word in ['listar', 'lista', 'todas', 'stories', 'quais']):
+    # Listar stories
+    if any(word in content_lower for word in ['listar', 'lista', 'todas', 'stories']):
         stories = story_repo.get_all()
         if stories:
-            stories_list = "\n".join([
-                f"- **{s.story_id}**: {s.title} [{s.status}] - {s.story_points} pts"
-                for s in stories
-            ])
-            return {
-                "content": f"**Stories do Projeto:**\n\n{stories_list}\n\nDigite 'detalhes STR-XXXX' para ver mais informacoes.",
-                "actions": []
-            }
-        return {
-            "content": "Nao ha stories cadastradas ainda. Crie uma clicando em 'Nova Story'.",
-            "actions": []
-        }
-
-    # =========================================================================
-    # 5. CRIAR STORY
-    # =========================================================================
-    if any(word in content_lower for word in ['criar', 'nova', 'adicionar']) and 'story' in content_lower:
-        return {
-            "content": "Para criar uma nova Story, clique no botao **'Nova Story'** no canto superior direito.\n\nOu me diga o que precisa e eu ajudo a estruturar:\n- Qual o titulo da story?\n- Quem eh o usuario (persona)?\n- O que ele quer fazer?\n- Qual o beneficio?",
-            "actions": [{"type": "create_story"}]
-        }
-
-    # =========================================================================
-    # 6. PROGRESSO/STATUS
-    # =========================================================================
-    if any(word in content_lower for word in ['progresso', 'status', 'andamento', 'como esta']):
-        if project_id:
-            stories = story_repo.get_by_project(project_id)
-        else:
-            stories = story_repo.get_all()
-
-        total = len(stories)
-        by_status = {}
-        total_points = 0
-        done_points = 0
-
-        for s in stories:
-            by_status[s.status] = by_status.get(s.status, 0) + 1
-            total_points += s.story_points or 0
-            if s.status == 'done':
-                done_points += s.story_points or 0
-
-        status_text = "\n".join([f"- **{k}**: {v} stories" for k, v in by_status.items()])
-        velocity = f"{done_points}/{total_points} pontos"
-
-        return {
-            "content": f"**Resumo do Projeto:**\n\n{status_text}\n\n**Velocidade:** {velocity} concluidos",
-            "actions": []
-        }
-
-    # =========================================================================
-    # 7. AJUDA
-    # =========================================================================
-    if any(word in content_lower for word in ['ajuda', 'help', 'comandos', 'o que voce']):
-        return {
-            "content": """**Comandos Disponiveis:**
-
-**Ver Stories:**
-- 'detalhes STR-0001' - Ver detalhes completos
-- 'listar stories' - Ver todas as stories
-
-**Gerenciar Stories:**
-- 'mover STR-0001 para ready' - Mover no Kanban
-- 'editar STR-0001' - Editar story
-- 'criar nova story' - Criar story
-
-**Informacoes:**
-- 'progresso' ou 'status' - Ver resumo do projeto
-- 'como testar' - Instrucoes de teste
-
-**Dica:** Voce pode mencionar o ID da story (STR-XXXX) em qualquer mensagem!""",
-            "actions": []
-        }
-
-    # =========================================================================
-    # 8. COMO TESTAR
-    # =========================================================================
-    if 'testar' in content_lower or 'test' in content_lower:
-        mentioned_id = extract_story_id(content)
-        if mentioned_id:
-            story = story_repo.get_by_id(mentioned_id)
-            if story:
-                # Buscar documentacao de teste
-                doc_repo = StoryDocumentationRepository(db)
-                docs = doc_repo.get_by_story(mentioned_id)
-                test_docs = [d for d in docs if d.doc_type == 'test']
-                if test_docs:
-                    return {
-                        "content": f"**Instrucoes de Teste para {mentioned_id}:**\n\n{test_docs[0].content}",
-                        "actions": []
-                    }
-        return {
-            "content": "As instrucoes de teste estao na aba **'Docs'** de cada Story. Clique na story e va para a aba Docs.",
-            "actions": []
-        }
-
-    # =========================================================================
-    # 9. ANALISE DE DOCUMENTO (se mencionou arquivo)
-    # =========================================================================
-    if any(word in content_lower for word in ['arquivo', 'documento', 'anexo', 'upload', 'analisar']):
-        return {
-            "content": "Para analisar um documento:\n1. Clique no icone 📎 ao lado do campo de mensagem\n2. Selecione o arquivo\n3. Aguarde o upload\n4. Me diga o que voce quer saber sobre o documento\n\nSuporto: PDF, TXT, MD, JSON, imagens",
-            "actions": []
-        }
-
-    # =========================================================================
-    # RESPOSTA PADRAO INTELIGENTE
-    # =========================================================================
-    # Verificar se mencionou um ID de story
-    mentioned_id = extract_story_id(content)
-    if mentioned_id:
-        story = story_repo.get_by_id(mentioned_id)
-        if story:
-            return {
-                "content": f"Voce mencionou a story **{mentioned_id}**: {story.title}\n\nO que voce gostaria de fazer?\n- 'detalhes {mentioned_id}' - Ver informacoes completas\n- 'mover {mentioned_id} para ready' - Mover no Kanban\n- 'editar {mentioned_id}' - Modificar a story",
-                "actions": []
-            }
+            stories_list = "\n".join([f"- **{s.story_id}**: {s.title} [{s.status}]" for s in stories])
+            return {"content": f"**Stories:**\n{stories_list}", "actions": []}
 
     # Resposta padrao
     return {
-        "content": "Posso ajudar com suas stories! Experimente:\n- **'detalhes STR-0001'** - Ver uma story\n- **'listar stories'** - Ver todas\n- **'mover STR-0001 para ready'** - Mover\n- **'ajuda'** - Ver todos os comandos",
+        "content": "[Claude AI indisponivel] Posso ajudar com comandos basicos:\n- 'detalhes STR-XXXX'\n- 'mover STR-XXXX para ready'\n- 'listar stories'\n\nPara respostas inteligentes, configure a API key do Claude.",
         "actions": []
     }
 
