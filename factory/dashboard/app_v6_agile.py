@@ -1777,20 +1777,42 @@ HTML_TEMPLATE = """
             const sendMessage = async () => {
                 if (!chatInput.value.trim()) return;
 
-                const res = await fetch('/api/chat/message', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        project_id: selectedProjectId.value,
-                        content: chatInput.value
-                    })
-                });
+                const messageContent = chatInput.value;
+                chatInput.value = ''; // Clear immediately for better UX
 
-                const data = await res.json();
-                chatHistory.value.push(data.user_message);
-                chatHistory.value.push(data.assistant_message);
-                chatInput.value = '';
-                nextTick(() => scrollChatToBottom());
+                try {
+                    const res = await fetch('/api/chat/message', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            project_id: selectedProjectId.value,
+                            content: messageContent
+                        })
+                    });
+
+                    if (!res.ok) {
+                        throw new Error('Erro ao enviar mensagem');
+                    }
+
+                    const data = await res.json();
+                    if (data.user_message) {
+                        chatHistory.value.push(data.user_message);
+                    }
+                    if (data.assistant_message) {
+                        chatHistory.value.push(data.assistant_message);
+                    }
+                    nextTick(() => scrollChatToBottom());
+                } catch (error) {
+                    console.error('Chat error:', error);
+                    // Show error message
+                    chatHistory.value.push({
+                        message_id: 'error-' + Date.now(),
+                        role: 'assistant',
+                        content: 'Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente.',
+                        created_at: new Date().toISOString()
+                    });
+                    nextTick(() => scrollChatToBottom());
+                }
             };
 
             const scrollChatToBottom = () => {
