@@ -477,55 +477,324 @@ def send_chat_message(msg: ChatMessageCreate):
         db.close()
 
 
+def extract_story_id(text: str) -> Optional[str]:
+    """Extrai ID de story do texto (STR-XXXX)"""
+    import re
+    match = re.search(r'STR-?\d{4}', text.upper())
+    if match:
+        story_id = match.group()
+        if '-' not in story_id:
+            story_id = 'STR-' + story_id[3:]
+        return story_id
+    return None
+
+
+def format_story_details(story) -> str:
+    """Formata detalhes completos de uma story"""
+    # Narrativa Agile
+    narrative = ""
+    if story.persona:
+        narrative += f"**Como** {story.persona}\n"
+    if story.action:
+        narrative += f"**Eu quero** {story.action}\n"
+    if story.benefit:
+        narrative += f"**Para que** {story.benefit}\n"
+
+    # Criterios de aceite
+    criteria = ""
+    if story.acceptance_criteria:
+        criteria = "\n".join([f"- {c}" for c in story.acceptance_criteria])
+
+    # Definition of Done
+    dod = ""
+    if story.definition_of_done:
+        dod = "\n".join([f"- {d}" for d in story.definition_of_done])
+
+    # Tasks
+    tasks_info = ""
+    if story.story_tasks:
+        tasks_info = "\n".join([
+            f"- **{t.task_id}**: {t.title} [{t.status}]"
+            for t in story.story_tasks
+        ])
+
+    return f"""## {story.story_id}: {story.title}
+
+**Status:** {story.status} | **Pontos:** {story.story_points} pts | **Complexidade:** {story.complexity}
+**Categoria:** {story.category} | **Prioridade:** {story.priority}
+
+### Narrativa
+{narrative if narrative else '_Nao definida_'}
+
+### Descricao
+{story.description or '_Sem descricao_'}
+
+### Criterios de Aceite
+{criteria if criteria else '_Nenhum criterio definido_'}
+
+### Definition of Done
+{dod if dod else '_Nenhum DoD definido_'}
+
+### Tasks ({story.tasks_completed}/{story.tasks_total})
+{tasks_info if tasks_info else '_Nenhuma task_'}
+
+### Notas Tecnicas
+{story.technical_notes or '_Sem notas_'}"""
+
+
 def generate_assistant_response(content: str, project_id: str, story_id: str, db) -> dict:
-    """Gera resposta do assistente baseada na mensagem"""
+    """Gera resposta do assistente baseada na mensagem - versao inteligente"""
     content_lower = content.lower()
+    story_repo = StoryRepository(db)
+    actions = []
 
-    # Respostas contextuais simples
-    if "criar" in content_lower and "story" in content_lower:
-        return {
-            "content": "Para criar uma nova Story, clique no botao 'Nova Story' no canto superior direito do Kanban. Voce pode definir a narrativa (Como um... Eu quero... Para que...), criterios de aceite, e muito mais.",
-            "actions": []
-        }
+    # =========================================================================
+    # 1. DETALHES DE STORY
+    # =========================================================================
+    if any(word in content_lower for word in ['detalhe', 'detalhes', 'info', 'mostrar', 'exibir', 'sobre']):
+        # Tentar extrair ID da mensagem
+        mentioned_id = extract_story_id(content)
+        target_id = mentioned_id or story_id
 
-    if "como testar" in content_lower or "testar" in content_lower:
-        return {
-            "content": "As instrucoes de teste estao na aba 'Docs' de cada Story. La voce encontra a documentacao tecnica, casos de teste e instrucoes de deploy. Cada task completada tambem registra os resultados de testes.",
-            "actions": []
-        }
-
-    if "progresso" in content_lower or "status" in content_lower:
-        if project_id:
-            story_repo = StoryRepository(db)
-            stories = story_repo.get_by_project(project_id)
-            total = len(stories)
-            done = sum(1 for s in stories if s.status == "done")
-            in_progress = sum(1 for s in stories if s.status == "in_progress")
+        if target_id:
+            story = story_repo.get_by_id(target_id)
+            if story:
+                return {
+                    "content": format_story_details(story),
+                    "actions": [{"type": "show_story", "story_id": target_id}]
+                }
+            else:
+                return {
+                    "content": f"Nao encontrei a story {target_id}. Verifique se o ID esta correto.",
+                    "actions": []
+                }
+        else:
+            # Listar stories disponiveis
+            stories = story_repo.get_all()[:10]
+            stories_list = "\n".join([f"- **{s.story_id}**: {s.title}" for s in stories])
             return {
-                "content": f"Projeto tem {total} stories: {done} concluidas, {in_progress} em progresso, {total - done - in_progress} pendentes.",
+                "content": f"Qual story voce gostaria de ver? Aqui estao as disponiveis:\n\n{stories_list}\n\nDigite: 'detalhes STR-XXXX'",
+                "actions": []
+            }
+
+    # =========================================================================
+    # 2. MOVER STORY
+    # =========================================================================
+    if any(word in content_lower for word in ['mover', 'mova', 'move', 'passar', 'mudar status']):
+        mentioned_id = extract_story_id(content)
+        target_id = mentioned_id or story_id
+
+        # Detectar status destino
+        status_map = {
+            'backlog': StoryStatus.BACKLOG.value,
+            'ready': StoryStatus.READY.value,
+            'in_progress': StoryStatus.IN_PROGRESS.value,
+            'in progress': StoryStatus.IN_PROGRESS.value,
+            'em progresso': StoryStatus.IN_PROGRESS.value,
+            'review': StoryStatus.REVIEW.value,
+            'revisao': StoryStatus.REVIEW.value,
+            'testing': StoryStatus.TESTING.value,
+            'teste': StoryStatus.TESTING.value,
+            'done': StoryStatus.DONE.value,
+            'concluida': StoryStatus.DONE.value,
+            'pronto': StoryStatus.READY.value,
+            'pronta': StoryStatus.READY.value
+        }
+
+        new_status = None
+        for key, value in status_map.items():
+            if key in content_lower:
+                new_status = value
+                break
+
+        if target_id and new_status:
+            story = story_repo.get_by_id(target_id)
+            if story:
+                story_repo.move_story(target_id, new_status)
+                return {
+                    "content": f"Story **{target_id}** movida para **{new_status}** com sucesso!",
+                    "actions": [{"type": "move_story", "story_id": target_id, "status": new_status}]
+                }
+            else:
+                return {
+                    "content": f"Nao encontrei a story {target_id}.",
+                    "actions": []
+                }
+        elif target_id:
+            return {
+                "content": f"Para onde voce quer mover a story {target_id}?\n\nOpcoes: **backlog**, **ready**, **in_progress**, **review**, **testing**, **done**",
+                "actions": []
+            }
+        else:
+            return {
+                "content": "Qual story voce quer mover? Diga: 'mover STR-XXXX para ready'",
+                "actions": []
+            }
+
+    # =========================================================================
+    # 3. EDITAR STORY
+    # =========================================================================
+    if any(word in content_lower for word in ['editar', 'edite', 'alterar', 'modificar', 'atualizar']):
+        mentioned_id = extract_story_id(content)
+        target_id = mentioned_id or story_id
+
+        if target_id:
+            story = story_repo.get_by_id(target_id)
+            if story:
+                # Detectar o que editar
+                if 'titulo' in content_lower or 'title' in content_lower:
+                    return {
+                        "content": f"Para editar o titulo da story {target_id}, clique nela no Kanban e edite no painel lateral. Ou me diga o novo titulo: 'editar titulo {target_id}: Novo Titulo'",
+                        "actions": [{"type": "open_story", "story_id": target_id}]
+                    }
+                elif 'ponto' in content_lower or 'story point' in content_lower:
+                    return {
+                        "content": f"Qual o novo valor de Story Points para {target_id}? (1, 2, 3, 5, 8, 13)",
+                        "actions": []
+                    }
+                elif 'prioridade' in content_lower:
+                    return {
+                        "content": f"Qual a nova prioridade para {target_id}? (low, medium, high, urgent)",
+                        "actions": []
+                    }
+                else:
+                    return {
+                        "content": f"Abrindo story **{target_id}** para edicao. Voce pode editar:\n- **Titulo**: 'editar titulo {target_id}: Novo Nome'\n- **Pontos**: 'editar pontos {target_id}: 5'\n- **Prioridade**: 'editar prioridade {target_id}: high'\n- **Descricao, criterios, DoD**: Clique na story no Kanban",
+                        "actions": [{"type": "open_story", "story_id": target_id}]
+                    }
+        else:
+            return {
+                "content": "Qual story voce quer editar? Diga: 'editar STR-XXXX'",
+                "actions": []
+            }
+
+    # =========================================================================
+    # 4. LISTAR STORIES
+    # =========================================================================
+    if any(word in content_lower for word in ['listar', 'lista', 'todas', 'stories', 'quais']):
+        stories = story_repo.get_all()
+        if stories:
+            stories_list = "\n".join([
+                f"- **{s.story_id}**: {s.title} [{s.status}] - {s.story_points} pts"
+                for s in stories
+            ])
+            return {
+                "content": f"**Stories do Projeto:**\n\n{stories_list}\n\nDigite 'detalhes STR-XXXX' para ver mais informacoes.",
                 "actions": []
             }
         return {
-            "content": "Selecione um projeto para ver o progresso detalhado das stories.",
+            "content": "Nao ha stories cadastradas ainda. Crie uma clicando em 'Nova Story'.",
             "actions": []
         }
 
-    if "ajuda" in content_lower or "help" in content_lower:
+    # =========================================================================
+    # 5. CRIAR STORY
+    # =========================================================================
+    if any(word in content_lower for word in ['criar', 'nova', 'adicionar']) and 'story' in content_lower:
         return {
-            "content": """Posso ajudar com:
-- **Criar Story**: Clique em 'Nova Story' ou me diga o que precisa
-- **Ver progresso**: Pergunte 'qual o status do projeto?'
-- **Como testar**: Veja a aba 'Docs' de cada story
-- **Mover stories**: Arraste no Kanban ou use 'mover story X para Y'
-- **Editar**: Clique em uma story para abrir o painel de detalhes
+            "content": "Para criar uma nova Story, clique no botao **'Nova Story'** no canto superior direito.\n\nOu me diga o que precisa e eu ajudo a estruturar:\n- Qual o titulo da story?\n- Quem eh o usuario (persona)?\n- O que ele quer fazer?\n- Qual o beneficio?",
+            "actions": [{"type": "create_story"}]
+        }
 
-O que voce gostaria de fazer?""",
+    # =========================================================================
+    # 6. PROGRESSO/STATUS
+    # =========================================================================
+    if any(word in content_lower for word in ['progresso', 'status', 'andamento', 'como esta']):
+        if project_id:
+            stories = story_repo.get_by_project(project_id)
+        else:
+            stories = story_repo.get_all()
+
+        total = len(stories)
+        by_status = {}
+        total_points = 0
+        done_points = 0
+
+        for s in stories:
+            by_status[s.status] = by_status.get(s.status, 0) + 1
+            total_points += s.story_points or 0
+            if s.status == 'done':
+                done_points += s.story_points or 0
+
+        status_text = "\n".join([f"- **{k}**: {v} stories" for k, v in by_status.items()])
+        velocity = f"{done_points}/{total_points} pontos"
+
+        return {
+            "content": f"**Resumo do Projeto:**\n\n{status_text}\n\n**Velocidade:** {velocity} concluidos",
             "actions": []
         }
+
+    # =========================================================================
+    # 7. AJUDA
+    # =========================================================================
+    if any(word in content_lower for word in ['ajuda', 'help', 'comandos', 'o que voce']):
+        return {
+            "content": """**Comandos Disponiveis:**
+
+**Ver Stories:**
+- 'detalhes STR-0001' - Ver detalhes completos
+- 'listar stories' - Ver todas as stories
+
+**Gerenciar Stories:**
+- 'mover STR-0001 para ready' - Mover no Kanban
+- 'editar STR-0001' - Editar story
+- 'criar nova story' - Criar story
+
+**Informacoes:**
+- 'progresso' ou 'status' - Ver resumo do projeto
+- 'como testar' - Instrucoes de teste
+
+**Dica:** Voce pode mencionar o ID da story (STR-XXXX) em qualquer mensagem!""",
+            "actions": []
+        }
+
+    # =========================================================================
+    # 8. COMO TESTAR
+    # =========================================================================
+    if 'testar' in content_lower or 'test' in content_lower:
+        mentioned_id = extract_story_id(content)
+        if mentioned_id:
+            story = story_repo.get_by_id(mentioned_id)
+            if story:
+                # Buscar documentacao de teste
+                doc_repo = StoryDocumentationRepository(db)
+                docs = doc_repo.get_by_story(mentioned_id)
+                test_docs = [d for d in docs if d.doc_type == 'test']
+                if test_docs:
+                    return {
+                        "content": f"**Instrucoes de Teste para {mentioned_id}:**\n\n{test_docs[0].content}",
+                        "actions": []
+                    }
+        return {
+            "content": "As instrucoes de teste estao na aba **'Docs'** de cada Story. Clique na story e va para a aba Docs.",
+            "actions": []
+        }
+
+    # =========================================================================
+    # 9. ANALISE DE DOCUMENTO (se mencionou arquivo)
+    # =========================================================================
+    if any(word in content_lower for word in ['arquivo', 'documento', 'anexo', 'upload', 'analisar']):
+        return {
+            "content": "Para analisar um documento:\n1. Clique no icone 📎 ao lado do campo de mensagem\n2. Selecione o arquivo\n3. Aguarde o upload\n4. Me diga o que voce quer saber sobre o documento\n\nSuporto: PDF, TXT, MD, JSON, imagens",
+            "actions": []
+        }
+
+    # =========================================================================
+    # RESPOSTA PADRAO INTELIGENTE
+    # =========================================================================
+    # Verificar se mencionou um ID de story
+    mentioned_id = extract_story_id(content)
+    if mentioned_id:
+        story = story_repo.get_by_id(mentioned_id)
+        if story:
+            return {
+                "content": f"Voce mencionou a story **{mentioned_id}**: {story.title}\n\nO que voce gostaria de fazer?\n- 'detalhes {mentioned_id}' - Ver informacoes completas\n- 'mover {mentioned_id} para ready' - Mover no Kanban\n- 'editar {mentioned_id}' - Modificar a story",
+                "actions": []
+            }
 
     # Resposta padrao
     return {
-        "content": "Entendi! Posso ajudar com a gestao das suas stories. Pergunte sobre progresso, como criar stories, ou como testar as funcionalidades.",
+        "content": "Posso ajudar com suas stories! Experimente:\n- **'detalhes STR-0001'** - Ver uma story\n- **'listar stories'** - Ver todas\n- **'mover STR-0001 para ready'** - Mover\n- **'ajuda'** - Ver todos os comandos",
         "actions": []
     }
 
