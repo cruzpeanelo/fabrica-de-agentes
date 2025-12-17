@@ -493,20 +493,13 @@ async def get_story(story_id: str):
 @app.post("/api/stories")
 async def create_story(data: StoryCreate):
     """Cria nova story"""
+    import uuid
     db = SessionLocal()
     try:
-        # Gera ID da story baseado no maior numero existente
-        all_stories = db.query(Story.story_id).all()
-        max_num = 0
-        for (sid,) in all_stories:
-            if sid and sid.startswith('US-'):
-                try:
-                    num = int(sid.split('-')[1])
-                    if num > max_num:
-                        max_num = num
-                except (ValueError, IndexError):
-                    pass
-        story_id = f"US-{max_num + 1:03d}"
+        # Gera ID unico usando timestamp + uuid parcial para evitar colisoes
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        unique_suffix = uuid.uuid4().hex[:4].upper()
+        story_id = f"US-{timestamp}-{unique_suffix}"
 
         repo = StoryRepository(db)
         story = repo.create({
@@ -521,6 +514,8 @@ async def create_story(data: StoryCreate):
         })
 
         return {"success": True, "story": story.to_dict()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()
 
