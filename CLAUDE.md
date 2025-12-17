@@ -1,283 +1,260 @@
-# Fabrica de Workers
+# Fabrica de Agentes
 
-## Sistema de Desenvolvimento Autonomo com Workers Claude
+## Sistema de Desenvolvimento Autonomo com Agentes IA
 
-A **Fabrica de Workers** e uma plataforma que utiliza workers Claude para construir software de forma automatizada. Cada worker executa um loop autonomo de geracao, validacao e correcao.
+A **Fabrica de Agentes** e uma plataforma de desenvolvimento autonomo que combina:
+- **Dashboard Agile v6.0**: Gestao de User Stories com Kanban, narrativa Agile, e assistente IA
+- **Workers Claude**: Processamento autonomo de tarefas com loop de auto-correcao
+- **Kanban Watcher**: Monitoramento automatico que executa tarefas quando movidas para "To Do"
 
-### Dashboard de Monitoramento
+### Dashboards Disponiveis
 
-O dashboard esta disponivel em **http://localhost:9000** e mostra em tempo real:
-- Fila de jobs (pendentes, processando, completos)
-- Status dos workers (ativo, idle, erro)
-- Progresso de cada job (etapa atual, iteracoes)
-- Estatisticas da fila
+| Dashboard | Porta | Descricao |
+|-----------|-------|-----------|
+| **Agile v6** | 9001 | Sistema Agile completo com Stories, Tasks, Docs e Chat |
+| **Kanban v5** | 9001 | Kanban simples de tarefas |
+| **Workers v4** | 9000 | Fila de jobs e workers Claude |
 
-## Arquitetura v4.0
+## Arquitetura Agile v6.0
 
 ```
-User Request -> FastAPI (JWT/Rate Limit) -> Redis Queue -> Worker Pool (2-5)
-                                                              |
-                                                       Claude API
-                                                              |
-                                          Loop: Generate -> Lint -> Test -> Fix (max 5x)
-                                                              |
-                                                       projects/ folder
+User Stories -> Kanban Board -> Tasks -> Autonomous Dev -> Documentation
+      |              |            |            |              |
+  Narrativa      Drag/Drop    Subtarefas   Claude AI    Como Testar
+  Criterios      Colunas      Progresso    Codigo       Deploy
+  DoD            Sprint       Output       Testes       Versao
 ```
 
 ## Estrutura do Projeto
 
 ```
-Fabrica de Workers/
+Fabrica de Agentes/
 ├── factory/
 │   ├── api/                    # API REST
-│   │   ├── routes.py           # Endpoints de jobs/workers/queue
-│   │   ├── auth.py             # JWT authentication
-│   │   └── rate_limit.py       # Redis rate limiting
+│   │   ├── routes.py           # Endpoints
+│   │   └── auth.py             # Autenticacao JWT
 │   ├── core/                   # Core do sistema
-│   │   ├── job_queue.py        # Redis job queue (FIFO)
-│   │   ├── worker.py           # Claude workers + WorkerPool
-│   │   └── autonomous_loop.py  # Loop Generate->Lint->Test->Fix
+│   │   ├── autonomous_loop.py  # Loop Generate->Lint->Test->Fix
+│   │   ├── job_queue.py        # Redis job queue
+│   │   └── story_generator.py  # Gerador de stories
 │   ├── database/               # Banco de dados
-│   │   ├── connection.py       # PostgreSQL + Redis + SQLite fallback
-│   │   ├── models.py           # SQLAlchemy models (6 tabelas)
+│   │   ├── connection.py       # SQLite + SQLAlchemy
+│   │   ├── models.py           # Modelos (Story, Task, etc)
 │   │   └── repositories.py     # Data access layer
-│   ├── dashboard/              # Dashboard web
-│   │   └── app_v4.py           # FastAPI + Vue.js 3
-│   ├── scripts/                # Scripts de inicializacao
-│   │   ├── start_workers.py    # Launcher de workers
-│   │   ├── start_all.py        # Launcher full stack
-│   │   └── init_db.py          # Inicializacao do banco
-│   └── config.py               # Configuracoes centralizadas
-├── projects/                   # Projetos gerados pelos workers
-├── docker-compose.yml          # PostgreSQL + Redis
-├── .env.example                # Template de variaveis
-└── requirements.txt            # Dependencias Python
+│   ├── dashboard/              # Dashboards web
+│   │   ├── app_v6_agile.py     # Dashboard Agile (Stories)
+│   │   ├── app_v5_kanban.py    # Dashboard Kanban (Tasks)
+│   │   └── app.py              # Dashboard Workers
+│   └── config.py               # Configuracoes
+├── projects/                   # Projetos gerados
+├── uploads/                    # Arquivos anexados
+├── run_kanban_watcher.py       # Watcher automatico
+├── run_kanban_dev.py           # Desenvolvimento manual
+└── docker-compose.yml          # PostgreSQL + Redis
 ```
 
 ## Iniciando a Fabrica
 
+### Dashboard Agile (Recomendado)
 ```bash
-# 1. Iniciar infraestrutura (PostgreSQL + Redis)
-docker-compose up -d
+# Iniciar Dashboard Agile v6
+python factory/dashboard/app_v6_agile.py
 
-# 2. Inicializar banco de dados
-python factory/scripts/init_db.py --seed
-
-# 3. Iniciar stack completa
-python factory/scripts/start_all.py --workers 2
-
-# Dashboard disponivel em: http://localhost:9000
-# API Docs: http://localhost:9000/docs
+# Dashboard disponivel em: http://localhost:9001
 ```
 
-## Componentes Principais
-
-### 1. Job Queue (`factory/core/job_queue.py`)
-
-Gerencia fila de jobs usando Redis (com fallback SQLite).
-
-```python
-from factory.core.job_queue import get_queue
-
-queue = await get_queue()
-
-# Criar job
-job = await queue.enqueue({
-    "description": "API REST para e-commerce",
-    "tech_stack": "python,fastapi",
-    "features": ["CRUD produtos", "Carrinho", "Checkout"]
-})
-
-# Verificar status
-status = await queue.get_job(job['job_id'])
-print(f"Status: {status['status']} - Etapa: {status['current_step']}")
-```
-
-### 2. Worker (`factory/core/worker.py`)
-
-Workers Claude que processam jobs da fila.
-
-```python
-from factory.core.worker import WorkerPool
-
-pool = WorkerPool(num_workers=3, model="claude-sonnet-4-20250514")
-await pool.start_all()
-```
-
-### 3. Autonomous Loop (`factory/core/autonomous_loop.py`)
-
-Loop de desenvolvimento com auto-correcao.
-
-```
-1. SETUP    - Prepara ambiente
-2. GENERATE - Claude gera codigo
-3. LINT     - Valida com ruff/eslint
-4. TEST     - Executa pytest/jest
-5. FIX      - Claude corrige erros (max 5x)
-6. COMPLETE - Projeto pronto
-```
-
-## API Endpoints
-
-### Jobs
+### Desenvolvimento Autonomo
 ```bash
-POST   /api/v1/jobs           # Criar job
-GET    /api/v1/jobs           # Listar jobs
-GET    /api/v1/jobs/{id}      # Status do job
-DELETE /api/v1/jobs/{id}      # Cancelar job
+# Watcher automatico (monitora Kanban a cada 30s)
+python run_kanban_watcher.py
+
+# Desenvolvimento manual
+python run_kanban_dev.py
 ```
 
-### Queue
+## Sistema Agile v6.0
+
+### Modelos de Dados
+
+#### Story (User Story)
+| Campo | Tipo | Descricao |
+|-------|------|-----------|
+| story_id | string | ID unico (STR-0001) |
+| title | string | Titulo da story |
+| persona | string | "Como um [usuario]" |
+| action | string | "Eu quero [funcionalidade]" |
+| benefit | string | "Para que [beneficio]" |
+| acceptance_criteria | list | Criterios de aceite |
+| definition_of_done | list | Definition of Done |
+| story_points | int | Fibonacci (1,2,3,5,8,13,21) |
+| complexity | enum | low/medium/high/very_high |
+| status | enum | backlog/ready/in_progress/review/testing/done |
+| priority | enum | low/medium/high/urgent |
+| epic_id | string | Epic associado |
+| sprint_id | string | Sprint associado |
+
+#### StoryTask (Subtarefa)
+| Campo | Tipo | Descricao |
+|-------|------|-----------|
+| task_id | string | ID unico (STSK-0001) |
+| story_id | string | Story pai |
+| title | string | Titulo da task |
+| task_type | enum | development/review/test/documentation/design |
+| status | enum | pending/in_progress/completed/blocked |
+| progress | int | 0-100% |
+| files_created | list | Arquivos criados |
+| code_output | text | Codigo gerado |
+| test_results | json | Resultados de testes |
+
+#### StoryDocumentation
+| Campo | Tipo | Descricao |
+|-------|------|-----------|
+| doc_id | string | ID unico (DOC-0001) |
+| story_id | string | Story associada |
+| doc_type | enum | technical/user/test/deployment/api |
+| content | text | Conteudo Markdown |
+| test_instructions | text | Como testar |
+| test_cases | list | Casos de teste |
+
+### API Endpoints - Stories
+
 ```bash
-GET    /api/v1/queue/stats    # Estatisticas da fila
-GET    /api/v1/queue/peek     # Ver proximos jobs
+# Stories
+GET    /api/stories                     # Listar stories
+POST   /api/stories                     # Criar story
+GET    /api/stories/{id}                # Buscar story com tasks
+PUT    /api/stories/{id}                # Atualizar story
+DELETE /api/stories/{id}                # Deletar story
+PATCH  /api/stories/{id}/move           # Mover no Kanban
+
+# Story Tasks
+GET    /api/stories/{id}/tasks          # Listar tasks
+POST   /api/stories/{id}/tasks          # Criar task
+PUT    /api/story-tasks/{id}            # Atualizar task
+PATCH  /api/story-tasks/{id}/complete   # Completar task
+
+# Documentation
+GET    /api/stories/{id}/docs           # Listar docs
+POST   /api/stories/{id}/docs           # Criar doc
+
+# Chat (Assistente)
+GET    /api/chat/history                # Historico
+POST   /api/chat/message                # Enviar mensagem
+
+# Upload
+POST   /api/upload                      # Upload arquivo
+
+# Epics & Sprints
+GET    /api/projects/{id}/epics         # Listar epics
+POST   /api/epics                       # Criar epic
+GET    /api/projects/{id}/sprints       # Listar sprints
+POST   /api/sprints                     # Criar sprint
 ```
 
-### Workers
-```bash
-GET    /api/v1/workers        # Listar workers
-GET    /api/v1/workers/{id}   # Detalhes do worker
+### Kanban Board
+
+```
+┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐
+│  BACKLOG   │  │   READY    │  │ IN PROGRESS│  │   REVIEW   │  │  TESTING   │  │    DONE    │
+├────────────┤  ├────────────┤  ├────────────┤  ├────────────┤  ├────────────┤  ├────────────┤
+│ ┌────────┐ │  │ ┌────────┐ │  │ ┌────────┐ │  │            │  │            │  │            │
+│ │ STR-01 │ │  │ │ STR-02 │ │  │ │ STR-03 │ │  │            │  │            │  │            │
+│ │ 5 pts  │ │  │ │ 8 pts  │ │  │ │ 13 pts │ │  │            │  │            │  │            │
+│ │ [████] │ │  │ │ [██──] │ │  │ │ [█───] │ │  │            │  │            │  │            │
+│ └────────┘ │  │ └────────┘ │  │ └────────┘ │  │            │  │            │  │            │
+└────────────┘  └────────────┘  └────────────┘  └────────────┘  └────────────┘  └────────────┘
 ```
 
-### Auth
-```bash
-POST   /api/v1/auth/login     # Autenticar (retorna JWT)
-GET    /api/v1/auth/me        # Usuario atual
-POST   /api/v1/auth/refresh   # Renovar token
+### Story Card
+```
+┌─────────────────────────┐
+│ EPIC-01      5 pts  [!] │  <- Epic + Points + Priority
+│ Titulo da Story         │
+│ ────────────────────    │
+│ [████████░░] 80%        │  <- Progresso das tasks
+│ 4/5 tasks | @joao       │  <- Tasks + Assignee
+└─────────────────────────┘
 ```
 
-### Health
+## Exemplo: Criando Story via API
+
 ```bash
-GET    /api/v1/health         # Health check basico
-GET    /api/v1/health/detailed # Health check detalhado
-```
-
-## Exemplo: Criando um Job
-
-### Via API
-```bash
-# Autenticar
-TOKEN=$(curl -s -X POST http://localhost:9000/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "admin123"}' | jq -r '.access_token')
-
-# Criar job
-curl -X POST http://localhost:9000/api/v1/jobs \
-  -H "Authorization: Bearer $TOKEN" \
+# Criar Story
+curl -X POST http://localhost:9001/api/stories \
   -H "Content-Type: application/json" \
   -d '{
-    "description": "Sistema de gerenciamento de tarefas",
-    "tech_stack": "python,fastapi,postgresql",
-    "features": ["CRUD tarefas", "Usuarios", "Categorias"]
+    "project_id": "BELGO-BPM-001",
+    "title": "Implementar login com email",
+    "persona": "usuario do sistema",
+    "action": "fazer login com meu email",
+    "benefit": "acesse minhas informacoes de forma segura",
+    "acceptance_criteria": [
+      "Usuario pode fazer login com email valido",
+      "Senha deve ter minimo 8 caracteres",
+      "Mensagem de erro clara para credenciais invalidas"
+    ],
+    "definition_of_done": [
+      "Codigo revisado",
+      "Testes unitarios passando",
+      "Documentacao atualizada"
+    ],
+    "story_points": 5,
+    "priority": "high"
   }'
+
+# Criar Task na Story
+curl -X POST http://localhost:9001/api/stories/STR-0001/tasks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Criar endpoint de autenticacao",
+    "task_type": "development",
+    "estimated_hours": 4
+  }'
+
+# Mover Story para In Progress
+curl -X PATCH http://localhost:9001/api/stories/STR-0001/move \
+  -H "Content-Type: application/json" \
+  -d '{"status": "in_progress"}'
 ```
 
-### Via Python
-```python
-import asyncio
-from factory.core.job_queue import get_queue
+## Watcher Automatico
 
-async def main():
-    queue = await get_queue()
+O `run_kanban_watcher.py` monitora o Kanban a cada 30 segundos e processa automaticamente stories/tasks movidas para "To Do":
 
-    job = await queue.enqueue({
-        "description": "Blog com posts e comentarios",
-        "tech_stack": "python,fastapi,react",
-        "features": ["Posts", "Comentarios", "Tags"]
-    })
-
-    print(f"Job criado: {job['job_id']}")
-
-asyncio.run(main())
+```bash
+python run_kanban_watcher.py
 ```
 
-## Workflow do Job
+**Fluxo:**
+1. Story movida para "ready" ou "in_progress"
+2. Watcher detecta a mudanca
+3. Claude AI processa cada task da story
+4. Arquivos sao gerados em `projects/{project_id}/`
+5. Documentacao tecnica e criada automaticamente
+6. Story avanca pelo pipeline: in_progress -> testing -> done
 
-```
-1. Job CRIADO via API/Dashboard
-       |
-       v
-2. Job entra na FILA Redis (status: pending)
-       |
-       v
-3. Worker PEGA job (status: running)
-       |
-       v
-4. Autonomous Loop EXECUTA:
-   - GENERATE: Claude cria codigo
-   - LINT: Valida sintaxe/estilo
-   - TEST: Executa testes
-   - FIX: Corrige erros (se houver)
-       |
-       v
-5. Job COMPLETO (status: completed)
-   - Codigo em projects/{job_id}/
-```
+## Variaveis de Ambiente
 
-## Modelos de Dados
-
-### Job
-| Campo | Tipo | Descricao |
-|-------|------|-----------|
-| job_id | string | ID unico (JOB-YYYYMMDDHHMMSS-XXXX) |
-| description | string | O que construir |
-| tech_stack | string | Stack tecnologica |
-| features | list | Lista de features |
-| status | enum | pending/running/completed/failed/cancelled |
-| current_step | string | Etapa atual do loop |
-| progress | float | 0.0 a 1.0 |
-| worker_id | string | Worker processando |
-| output_path | string | Caminho do projeto gerado |
-| error_message | string | Mensagem de erro (se falhou) |
-
-### Worker
-| Campo | Tipo | Descricao |
-|-------|------|-----------|
-| worker_id | string | ID unico (worker-XXXX) |
-| status | enum | idle/busy/error |
-| current_job_id | string | Job sendo processado |
-| model | string | Modelo Claude |
-| jobs_completed | int | Total de jobs completos |
-| jobs_failed | int | Total de falhas |
-| avg_job_duration | float | Duracao media (segundos) |
-
-## Configuracoes
-
-### Variaveis de Ambiente (.env)
 ```bash
 # Claude API (obrigatorio)
 ANTHROPIC_API_KEY=sk-ant-...
 
-# Database
-DATABASE_URL=postgresql+asyncpg://fabrica:fabrica_secret@localhost:5432/fabrica_db
-REDIS_URL=redis://localhost:6379
-
-# Workers
-DEFAULT_WORKERS=2
-MAX_WORKERS=5
-WORKER_TIMEOUT=600
-
-# Claude
-CLAUDE_MODEL=claude-sonnet-4-20250514
-CLAUDE_MAX_TOKENS=4096
-
-# Rate Limiting
-RATE_LIMIT_REQUESTS=100
-RATE_LIMIT_WINDOW=60
+# Database (opcional - usa SQLite por padrao)
+DATABASE_URL=sqlite:///factory/database/factory.db
 
 # Dashboard
-DASHBOARD_PORT=9000
+DASHBOARD_PORT=9001
 ```
 
-## Scripts Disponiveis
+## Identidade Visual - Belgo Arames
 
-| Script | Comando | Descricao |
-|--------|---------|-----------|
-| Start All | `python factory/scripts/start_all.py` | Dashboard + Workers |
-| Start Workers | `python factory/scripts/start_workers.py -w 3` | Apenas workers |
-| Init DB | `python factory/scripts/init_db.py --seed` | Criar tabelas + dados |
-| Dashboard | `python factory/dashboard/app_v4.py` | Apenas dashboard |
+| Cor | Hex | Uso |
+|-----|-----|-----|
+| Azul Belgo | #003B4A | Header, botoes primarios |
+| Laranja Belgo | #FF6C00 | Acoes, CTAs |
+| Cinza Claro | #F3F4F6 | Background |
+| Branco | #FFFFFF | Cards, paineis |
 
 ---
 
-*Fabrica de Workers v4.0 - Desenvolvimento autonomo com Claude AI*
+*Fabrica de Agentes v6.0 - Sistema Agile de Desenvolvimento Autonomo*

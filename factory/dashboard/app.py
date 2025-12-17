@@ -4,6 +4,10 @@ Centro de comando para gerenciamento de projetos e agentes
 
 Acesse em: http://localhost:9000
 """
+# Carregar variaveis de ambiente do .env
+from dotenv import load_dotenv
+load_dotenv()
+
 import json
 import secrets
 from pathlib import Path
@@ -23,14 +27,16 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from factory.database.connection import init_db, SessionLocal
 from factory.database.models import (
-    Project, Story, Agent, Skill, Task, ActivityLog, FactoryEvent, Template, User, Sprint
+    Project, User, ActivityLog,
+    # Arquitetura MVP v4.0
+    Job, JobStatus, JobStep, FailureHistory, Worker
 )
 from factory.database.repositories import (
-    ProjectRepository, StoryRepository, AgentRepository, SkillRepository,
-    TaskRepository, ActivityLogRepository, FactoryEventRepository, TemplateRepository,
-    SprintRepository
+    ProjectRepository, UserRepository, ActivityLogRepository,
+    # Arquitetura MVP v4.0
+    JobRepository, FailureHistoryRepository, WorkerRepository
 )
-from factory.config import DASHBOARD_HOST, DASHBOARD_PORT, DASHBOARD_TITLE, AGENTS
+from factory.config import DASHBOARD_HOST, DASHBOARD_PORT, DASHBOARD_TITLE
 
 # Import corporate hierarchy for org chart
 try:
@@ -98,6 +104,14 @@ try:
     logger = get_logger()
 except ImportError:
     HAS_STRUCTURED_LOGGING = False
+
+# Import Job Queue and Autonomous Loop - Nova Arquitetura MVP
+try:
+    from factory.core.job_queue import get_queue, JobQueue
+    from factory.core.autonomous_loop import get_autonomous_loop, AutonomousLoop
+    HAS_JOB_SYSTEM = True
+except ImportError:
+    HAS_JOB_SYSTEM = False
 
 # FastAPI App with OpenAPI config
 app = FastAPI(
@@ -198,6 +212,26 @@ class SprintUpdate(BaseModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     planned_points: Optional[int] = None
+
+
+# =============================================================================
+# JOB MODELS - Nova Arquitetura MVP
+# =============================================================================
+
+class JobCreate(BaseModel):
+    """Modelo para criacao de Jobs - Nova arquitetura MVP"""
+    description: str
+    tech_stack: Optional[str] = None
+    features: Optional[List[str]] = []
+    project_id: Optional[str] = None
+
+
+class JobUpdate(BaseModel):
+    """Modelo para atualizacao de Jobs"""
+    status: Optional[str] = None
+    current_step: Optional[str] = None
+    progress: Optional[float] = None
+    error_message: Optional[str] = None
 
 
 # =============================================================================
@@ -983,6 +1017,293 @@ async def get_intelligent_developer_info():
         }
     except Exception as e:
         return {"error": str(e)}
+
+
+# =============================================================================
+# JOB ENDPOINTS - Nova Arquitetura MVP
+# =============================================================================
+
+@app.get("/api/jobs")
+async def list_jobs(
+    status: str = None,
+    limit: int = Query(default=50, le=200)
+):
+    """
+    Lista jobs da fila - Nova Arquitetura MVP
+
+    - Substitui o modelo de 19 agentes por jobs assincronos
+    - Suporta filtro por status: pending, running, completed, failed
+    """
+    if not HAS_JOB_SYSTEM:
+        raise HTTPException(status_code=501, detail="Sistema de Jobs nao disponivel")
+
+    db = SessionLocal()
+    try:
+        repo = JobRepository(db)
+        jobs = repo.get_all(status=status, limit=limit)
+        stats = repo.count_by_status()
+
+        return {
+            "jobs": [j.to_dict() for j in jobs],
+            "stats": stats,
+            "total": len(jobs)
+        }
+    finally:
+        db.close()
+
+
+@app.post("/api/jobs")
+async def create_job(data: JobCreate):
+    """
+    Cria novo job na fila - Nova Arquitetura MVP
+
+    Fluxo:
+    1. Recebe descricao do projeto
+    2. Enfileira job para processamento
+    3. Worker processa com autonomous loop (generate -> lint -> test -> fix)
+    4. Retorna job_id para polling de status
+    """
+    if not HAS_JOB_SYSTEM:
+        raise HTTPException(status_code=501, detail="Sistema de Jobs nao disponivel")
+
+    try:
+        queue = get_queue()
+        job = queue.enqueue({
+            "description": data.description,
+            "tech_stack": data.tech_stack,
+            "features": data.features or [],
+            "project_id": data.project_id
+        })
+
+        return {
+            "success": True,
+            "job_id": job["job_id"],
+            "status": job["status"],
+            "message": "Job criado e enfileirado para processamento"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/jobs/{job_id}")
+async def get_job(job_id: str):
+    """
+    Busca job por ID - Para polling de status
+
+    Retorna:
+    - Status atual do job
+    - Step atual do autonomous loop
+    - Progresso (0-100%)
+    - Resultado (se completado)
+    - Erro (se falhou)
+    """
+    if not HAS_JOB_SYSTEM:
+        raise HTTPException(status_code=501, detail="Sistema de Jobs nao disponivel")
+
+    db = SessionLocal()
+    try:
+        repo = JobRepository(db)
+        job = repo.get_by_id(job_id)
+
+        if not job:
+            raise HTTPException(status_code=404, detail=f"Job {job_id} nao encontrado")
+
+        return job.to_dict()
+    finally:
+        db.close()
+
+
+@app.put("/api/jobs/{job_id}")
+async def update_job(job_id: str, data: JobUpdate):
+    """Atualiza job - Principalmente para cancelamento"""
+    if not HAS_JOB_SYSTEM:
+        raise HTTPException(status_code=501, detail="Sistema de Jobs nao disponivel")
+
+    db = SessionLocal()
+    try:
+        repo = JobRepository(db)
+        job = repo.get_by_id(job_id)
+
+        if not job:
+            raise HTTPException(status_code=404, detail=f"Job {job_id} nao encontrado")
+
+        update_data = data.dict(exclude_none=True)
+        job = repo.update(job_id, update_data)
+
+        return {"success": True, "job": job.to_dict()}
+    finally:
+        db.close()
+
+
+@app.delete("/api/jobs/{job_id}")
+async def delete_job(job_id: str):
+    """Remove job (apenas se nao estiver em execucao)"""
+    if not HAS_JOB_SYSTEM:
+        raise HTTPException(status_code=501, detail="Sistema de Jobs nao disponivel")
+
+    db = SessionLocal()
+    try:
+        repo = JobRepository(db)
+        job = repo.get_by_id(job_id)
+
+        if not job:
+            raise HTTPException(status_code=404, detail=f"Job {job_id} nao encontrado")
+
+        if job.status == JobStatus.RUNNING.value:
+            raise HTTPException(status_code=400, detail="Nao pode remover job em execucao")
+
+        repo.delete(job_id)
+        return {"success": True, "message": f"Job {job_id} removido"}
+    finally:
+        db.close()
+
+
+@app.post("/api/jobs/{job_id}/run")
+async def run_job(job_id: str):
+    """
+    Executa job manualmente (para testes)
+
+    Inicia o autonomous loop para o job especificado.
+    Em producao, workers pegam jobs automaticamente da fila.
+    """
+    if not HAS_JOB_SYSTEM:
+        raise HTTPException(status_code=501, detail="Sistema de Jobs nao disponivel")
+
+    db = SessionLocal()
+    try:
+        repo = JobRepository(db)
+        job = repo.get_by_id(job_id)
+
+        if not job:
+            raise HTTPException(status_code=404, detail=f"Job {job_id} nao encontrado")
+
+        if job.status not in [JobStatus.PENDING.value, JobStatus.QUEUED.value]:
+            raise HTTPException(status_code=400, detail=f"Job {job_id} nao esta pendente (status: {job.status})")
+
+        # Executar loop autonomo em background
+        import asyncio
+        loop = get_autonomous_loop()
+
+        # Atualizar status para running
+        repo.update_status(job_id, JobStatus.RUNNING.value, JobStep.PARSING.value)
+
+        # Criar task async (nao bloqueia a resposta)
+        asyncio.create_task(loop.run(job_id))
+
+        return {
+            "success": True,
+            "message": f"Job {job_id} iniciado",
+            "job": repo.get_by_id(job_id).to_dict()
+        }
+    finally:
+        db.close()
+
+
+@app.get("/api/jobs/{job_id}/logs")
+async def get_job_logs(job_id: str):
+    """Retorna logs de execucao do job"""
+    if not HAS_JOB_SYSTEM:
+        raise HTTPException(status_code=501, detail="Sistema de Jobs nao disponivel")
+
+    db = SessionLocal()
+    try:
+        repo = JobRepository(db)
+        job = repo.get_by_id(job_id)
+
+        if not job:
+            raise HTTPException(status_code=404, detail=f"Job {job_id} nao encontrado")
+
+        return {
+            "job_id": job_id,
+            "step_logs": job.step_logs or [],
+            "current_step": job.current_step,
+            "current_attempt": job.current_attempt
+        }
+    finally:
+        db.close()
+
+
+@app.get("/api/jobs/{job_id}/failures")
+async def get_job_failures(job_id: str):
+    """Retorna historico de falhas do job"""
+    if not HAS_JOB_SYSTEM:
+        raise HTTPException(status_code=501, detail="Sistema de Jobs nao disponivel")
+
+    db = SessionLocal()
+    try:
+        repo = FailureHistoryRepository(db)
+        failures = repo.get_by_job(job_id)
+
+        return {
+            "job_id": job_id,
+            "failures": [f.to_dict() for f in failures],
+            "total": len(failures)
+        }
+    finally:
+        db.close()
+
+
+@app.get("/api/queue/stats")
+async def get_queue_stats():
+    """
+    Retorna estatisticas da fila de jobs
+
+    Substitui a visualizacao de 19 agentes por metricas da fila:
+    - Jobs pendentes
+    - Jobs em execucao
+    - Jobs completados
+    - Jobs falhados
+    """
+    if not HAS_JOB_SYSTEM:
+        raise HTTPException(status_code=501, detail="Sistema de Jobs nao disponivel")
+
+    try:
+        queue = get_queue()
+        stats = queue.get_stats()
+        workers = queue.get_workers()
+
+        return {
+            "queue": stats,
+            "workers": workers,
+            "active_workers": len([w for w in workers if w["status"] == "busy"])
+        }
+    finally:
+        pass
+
+
+@app.get("/api/workers")
+async def list_workers():
+    """Lista workers do pool"""
+    if not HAS_JOB_SYSTEM:
+        raise HTTPException(status_code=501, detail="Sistema de Jobs nao disponivel")
+
+    db = SessionLocal()
+    try:
+        repo = WorkerRepository(db)
+        workers = repo.get_all()
+        active = repo.get_active()
+
+        return {
+            "workers": [w.to_dict() for w in workers],
+            "total": len(workers),
+            "active": len(active)
+        }
+    finally:
+        db.close()
+
+
+@app.post("/api/workers/{worker_id}/register")
+async def register_worker(worker_id: str, hostname: str = None):
+    """Registra um worker no pool"""
+    if not HAS_JOB_SYSTEM:
+        raise HTTPException(status_code=501, detail="Sistema de Jobs nao disponivel")
+
+    try:
+        queue = get_queue()
+        worker = queue.register_worker(worker_id, hostname=hostname)
+        return {"success": True, "worker": worker}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # =============================================================================

@@ -9,11 +9,15 @@ from .models import (
     FailureHistory,
     User,
     ActivityLog,
+    Task,
     ProjectStatus,
     JobStatus,
     JobStep,
-    WorkerStatus
+    WorkerStatus,
+    TaskStatus,
+    TaskPriority
 )
+from .repositories import TaskRepository
 
 __all__ = [
     # Connection
@@ -30,9 +34,14 @@ __all__ = [
     "FailureHistory",
     "User",
     "ActivityLog",
+    "Task",
     # Enums
     "ProjectStatus",
     "JobStatus",
     "JobStep",
-    "WorkerStatus"
+    "WorkerStatus",
+    "TaskStatus",
+    "TaskPriority",
+    # Repositories
+    "TaskRepository"
 ]
