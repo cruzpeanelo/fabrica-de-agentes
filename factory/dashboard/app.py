@@ -495,9 +495,18 @@ async def create_story(data: StoryCreate):
     """Cria nova story"""
     db = SessionLocal()
     try:
-        # Gera ID da story
-        count = db.query(Story).count()
-        story_id = f"US-{count + 1:03d}"
+        # Gera ID da story baseado no maior numero existente
+        all_stories = db.query(Story.story_id).all()
+        max_num = 0
+        for (sid,) in all_stories:
+            if sid and sid.startswith('US-'):
+                try:
+                    num = int(sid.split('-')[1])
+                    if num > max_num:
+                        max_num = num
+                except (ValueError, IndexError):
+                    pass
+        story_id = f"US-{max_num + 1:03d}"
 
         repo = StoryRepository(db)
         story = repo.create({
@@ -1946,7 +1955,9 @@ async def dashboard():
     <title>Fabrica de Agentes | Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script>
         tailwind.config = {
             theme: {
@@ -1968,14 +1979,56 @@ async def dashboard():
                         }
                     },
                     fontFamily: {
-                        'sans': ['Open Sans', 'sans-serif'],
+                        'sans': ['Inter', 'sans-serif'],
                     }
                 }
             }
         }
     </script>
     <style>
-        * { font-family: 'Open Sans', sans-serif; }
+        * { font-family: 'Inter', sans-serif; }
+
+        /* Modern gradient backgrounds */
+        .gradient-card {
+            background: linear-gradient(135deg, rgba(0, 98, 119, 0.3) 0%, rgba(0, 59, 74, 0.6) 100%);
+            backdrop-filter: blur(10px);
+        }
+
+        /* Glass morphism effect */
+        .glass {
+            background: rgba(0, 59, 74, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Better shadows */
+        .shadow-glow {
+            box-shadow: 0 4px 20px rgba(0, 181, 241, 0.15);
+        }
+
+        /* Loading spinner */
+        .spinner {
+            border: 3px solid rgba(255, 108, 0, 0.3);
+            border-top-color: #FF6C00;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Progress bar animation */
+        .progress-bar {
+            background: linear-gradient(90deg, #00A799, #00B5F1);
+            background-size: 200% 100%;
+            animation: progressGlow 2s ease infinite;
+        }
+        @keyframes progressGlow {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
 
         /* Scrollbar customizada */
         .scrollbar-thin::-webkit-scrollbar { width: 6px; }
