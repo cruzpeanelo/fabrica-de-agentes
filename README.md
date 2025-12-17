@@ -187,8 +187,8 @@ Configuracoes centralizadas:
 
 ```bash
 # Clone o repositorio
-git clone https://github.com/cruzpeanelo/fabrica-de-agentes.git
-cd fabrica-de-agentes
+git clone https://github.com/cruzpeanelo/fabrica-de-workers.git
+cd fabrica-de-workers
 
 # Ambiente virtual
 python -m venv venv
