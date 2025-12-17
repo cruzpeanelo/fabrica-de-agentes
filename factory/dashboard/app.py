@@ -1210,8 +1210,148 @@ async def list_skills(skill_type: str = None, category: str = None):
 
 
 # =============================================================================
+# GITHUB INTEGRATION ENDPOINTS
+# =============================================================================
+
+class GitHubSetupRequest(BaseModel):
+    repo_name: str
+    description: Optional[str] = ""
+    private: bool = False
+
+class GitHubSyncRequest(BaseModel):
+    message: str = "Update from Fabrica de Agentes"
+    branch: str = "main"
+
+@app.get("/api/github/status")
+async def github_status():
+    """Verifica status da conexao com GitHub"""
+    try:
+        from factory.skills.github_skill import GitHubSkill
+        skill = GitHubSkill()
+        if not skill.token:
+            return {"connected": False, "error": "Token nao configurado"}
+
+        result = skill._api_request("GET", "/user")
+        if result["success"]:
+            return {
+                "connected": True,
+                "user": result["data"]["login"],
+                "name": result["data"].get("name", "")
+            }
+        return {"connected": False, "error": result.get("error")}
+    except Exception as e:
+        return {"connected": False, "error": str(e)}
+
+@app.post("/api/github/projects/{project_id}/setup")
+async def github_setup_project(project_id: str, request: GitHubSetupRequest):
+    """Configura repositorio GitHub para um projeto"""
+    db = SessionLocal()
+    try:
+        from factory.skills.github_skill import GitHubSkill
+
+        project = db.query(Project).filter(Project.project_id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Projeto nao encontrado")
+
+        if not project.folder_path:
+            raise HTTPException(status_code=400, detail="Projeto sem pasta definida")
+
+        skill = GitHubSkill()
+        if not skill.token:
+            raise HTTPException(status_code=400, detail="GitHub token nao configurado")
+
+        result = skill.setup_project_repo(
+            project_path=project.folder_path,
+            repo_name=request.repo_name,
+            description=request.description or project.description or "",
+            private=request.private
+        )
+
+        if result["success"]:
+            # Atualiza URL do GitHub no projeto
+            user_result = skill._api_request("GET", "/user")
+            if user_result["success"]:
+                username = user_result["data"]["login"]
+                project.github_url = f"https://github.com/{username}/{request.repo_name}"
+                db.commit()
+
+        return result
+    finally:
+        db.close()
+
+@app.post("/api/github/projects/{project_id}/sync")
+async def github_sync_project(project_id: str, request: GitHubSyncRequest):
+    """Sincroniza projeto com GitHub (commit e push)"""
+    db = SessionLocal()
+    try:
+        from factory.skills.github_skill import GitHubSkill
+
+        project = db.query(Project).filter(Project.project_id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Projeto nao encontrado")
+
+        if not project.folder_path:
+            raise HTTPException(status_code=400, detail="Projeto sem pasta definida")
+
+        skill = GitHubSkill()
+        result = skill.commit_and_push(
+            path=project.folder_path,
+            message=request.message,
+            branch=request.branch
+        )
+
+        return result
+    finally:
+        db.close()
+
+@app.get("/api/github/projects/{project_id}/status")
+async def github_project_status(project_id: str):
+    """Verifica status git do projeto"""
+    db = SessionLocal()
+    try:
+        from factory.skills.github_skill import GitHubSkill
+
+        project = db.query(Project).filter(Project.project_id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Projeto nao encontrado")
+
+        if not project.folder_path:
+            return {"has_git": False, "error": "Projeto sem pasta"}
+
+        skill = GitHubSkill()
+        status = skill.status(project.folder_path)
+        remote_url = skill.get_remote_url(project.folder_path)
+
+        return {
+            "has_git": status["success"] or "not a git repository" not in status.get("error", ""),
+            "remote_url": remote_url,
+            "github_url": project.github_url,
+            "changes": status.get("output", "").strip().split("\n") if status.get("output") else []
+        }
+    finally:
+        db.close()
+
+
+# =============================================================================
 # TEMPLATE ENDPOINTS
 # =============================================================================
+
+@app.get("/api/languages")
+async def list_languages():
+    """Lista linguagens de programacao disponiveis para geracao de codigo"""
+    try:
+        from factory.skills.language_templates import list_available_languages
+        return {"languages": list_available_languages()}
+    except Exception as e:
+        return {
+            "languages": {
+                "python": {"name": "Python", "frameworks": ["FastAPI", "Flask", "Django"]},
+                "nodejs": {"name": "Node.js / TypeScript", "frameworks": ["Express", "NestJS"]},
+                "go": {"name": "Go", "frameworks": ["Gin", "Echo"]},
+                "java": {"name": "Java", "frameworks": ["Spring Boot", "Quarkus"]},
+                "frontend": {"name": "Frontend", "frameworks": ["Vue.js", "React"]}
+            }
+        }
 
 @app.get("/api/templates")
 async def list_templates(project_type: str = None):
