@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "post-tool-use": {
+      "command": "python",
+      "args": [".claude/hooks/post-tool-use.py"],
+      "timeout": 5000,
+      "enabled": true
+    }
+  },
+  "permissions": {
+    "allow": [
+      "Bash(python orchestrator/log_activity.py:*)",
+      "Bash(python:*)",
+      "Bash(curl:*)",
+      "Bash(mkdir:*)",
+      "Bash(ls:*)",
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep"
+    ]
+  }
+}

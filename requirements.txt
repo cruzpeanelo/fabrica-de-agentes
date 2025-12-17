@@ -1,0 +1,19 @@
+# Fábrica de Agentes - Dependencies
+
+# Web Framework
+fastapi>=0.100.0
+uvicorn>=0.23.0
+
+# Database
+sqlalchemy>=2.0.0
+
+# Authentication
+passlib>=1.7.4
+python-jose>=3.3.0
+bcrypt>=4.0.0
+
+# HTTP Client (optional, for API embeddings)
+httpx>=0.24.0
+
+# Development
+pytest>=7.0.0

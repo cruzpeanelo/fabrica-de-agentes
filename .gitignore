@@ -1,0 +1,109 @@
+# ===========================================
+# FABRICA DE AGENTES - GITIGNORE
+# ===========================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+.venv/
+ENV/
+.env
+.env.local
+.env.*.local
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.eslintcache
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database (banco de dados local)
+factory/database/*.db
+
+# Build
+dist/
+build/
+*.local
+
+# Testes
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
+# Arquivos temporarios
+*.tmp
+*.temp
+*.bak
+
+# Logs
+logs/
+*.log
+
+# Screenshots e arquivos de teste
+*.png
+*.jpg
+*.jpeg
+
+# PDF (manuais de marca, etc)
+*.pdf
+
+# Arquivos de teste
+nul
+
+# Projetos construidos (gerados automaticamente)
+projects/
+
+# Memoria dos agentes (gerada automaticamente)
+factory/memory/
+
+# GitHub Token (NUNCA commitar!)
+.github_token
+
+# Hook errors
+factory/hook_errors.log
+.claude/settings.local.json
