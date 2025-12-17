@@ -1,163 +1,193 @@
-# Fabrica de Agentes
+# Fabrica de Workers
 
-**Plataforma de Desenvolvimento Autonomo de Software com Agentes Inteligentes**
+**Plataforma de Desenvolvimento Autonomo com Workers Claude**
 
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green.svg)](https://fastapi.tiangolo.com)
-[![Claude AI](https://img.shields.io/badge/Claude-AI%20Powered-purple.svg)](https://anthropic.com)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com)
+[![Claude AI](https://img.shields.io/badge/Claude-Sonnet%204-purple.svg)](https://anthropic.com)
+[![Redis](https://img.shields.io/badge/Redis-7.0+-red.svg)](https://redis.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
-## O Que E a Fabrica de Agentes?
+## O Que E a Fabrica de Workers?
 
-A **Fabrica de Agentes** e uma plataforma revolucionaria que utiliza **108 agentes autonomos inteligentes** para desenvolver software de forma automatizada. Cada agente possui:
-
-- **Cerebro Inteligente** (AgentBrain) alimentado por IA (Claude/Anthropic)
-- **Memoria Persistente** que permite aprendizado continuo
-- **Capacidades Especializadas** (Skills) para diferentes tarefas
-- **Hierarquia de Aprovacoes** que simula uma equipe real
+A **Fabrica de Workers** e uma plataforma de desenvolvimento autonomo que utiliza **workers Claude** para gerar software completo de forma automatizada. Cada worker executa um loop inteligente de geracao, validacao e correcao ate produzir codigo funcional.
 
 ### Proposta de Valor
 
 | Para Negocios | Para TI |
 |---------------|---------|
 | Reducao de **70-80%** no tempo de desenvolvimento | Codigo padronizado e de alta qualidade |
-| Reducao de **60-70%** nos custos | Stack moderno (FastAPI, Vue.js, SQLAlchemy) |
-| Time-to-market acelerado | Testes automatizados gerados |
-| MVP completo em dias, nao meses | Documentacao automatica |
+| Escalabilidade horizontal (2-5 workers) | Stack moderna (FastAPI, PostgreSQL, Redis) |
+| Auto-correcao de erros (ate 5 tentativas) | Testes automatizados integrados |
+| API simples e job-centric | Dashboard em tempo real |
 
 ---
 
-## Resultados Comprovados
-
-### Exemplo de Projeto Gerado
-
-```
-Entrada: Documentos com requisitos de negocio
-Saida em < 30 segundos:
-
-- 62+ arquivos gerados automaticamente
-- 18 User Stories processadas
-- Backend completo (FastAPI + SQLAlchemy)
-  - 16 routers com CRUD
-  - 16 modelos de dados
-  - 16 schemas Pydantic
-- Frontend completo (Vue.js)
-  - 16 componentes
-- Testes automatizados
-- Estrutura de projeto profissional
-```
-
----
-
-## Arquitetura
+## Arquitetura v4.0
 
 ```
 +------------------------------------------------------------------+
-|                     FABRICA DE AGENTES                            |
+|                     FABRICA DE WORKERS v4.0                       |
 +------------------------------------------------------------------+
 |                                                                    |
 |  +------------------+    +------------------+    +---------------+ |
-|  |   DASHBOARD      |    |   API REST       |    |   DATABASE    | |
-|  |   (Vue.js)       |<-->|   (FastAPI)      |<-->|   (SQLite)    | |
+|  |   DASHBOARD      |    |   API REST       |    |   PostgreSQL  | |
+|  |   (Vue.js 3)     |<-->|   (FastAPI)      |<-->|   + Redis     | |
 |  +------------------+    +------------------+    +---------------+ |
+|         ^                        |                                 |
+|         |              +---------v----------+                      |
+|         |              |    REDIS QUEUE     |                      |
+|         |              |   (Job Manager)    |                      |
+|         |              +---------+----------+                      |
+|         |                        |                                 |
+|  +------+------------------------v-------------------------------+ |
+|  |                    WORKER POOL (2-5)                          | |
+|  |                                                                | |
+|  |  +-------------+  +-------------+  +-------------+            | |
+|  |  |  Worker 1   |  |  Worker 2   |  |  Worker N   |            | |
+|  |  | Claude API  |  | Claude API  |  | Claude API  |            | |
+|  |  +------+------+  +------+------+  +------+------+            | |
+|  |         |                |                |                    | |
+|  |         v                v                v                    | |
+|  |  +--------------------------------------------------+         | |
+|  |  |           AUTONOMOUS LOOP (por job)              |         | |
+|  |  |                                                  |         | |
+|  |  |   +----------+    +------+    +------+          |         | |
+|  |  |   | Generate |--->| Lint |--->| Test |          |         | |
+|  |  |   +----------+    +------+    +--+---+          |         | |
+|  |  |        ^                         |              |         | |
+|  |  |        |     +-------+           |              |         | |
+|  |  |        +-----| Fix   |<----------+              |         | |
+|  |  |              +-------+   (max 5x)               |         | |
+|  |  +--------------------------------------------------+         | |
+|  +---------------------------------------------------------------+ |
 |                                |                                   |
-|  +----------------------------------------------------------+    |
-|  |                 INTELLIGENT DEVELOPER                     |    |
-|  |  - Cerebros de agentes (AgentBrain + Claude AI)          |    |
-|  |  - Skills inteligentes com LLM                           |    |
-|  |  - Fallback para templates quando sem API key            |    |
-|  +----------------------------------------------------------+    |
-|                                |                                   |
-|  +----------------------------------------------------------+    |
-|  |                   AGENTES (108 total)                     |    |
-|  |                                                            |    |
-|  |  +--------+  +--------+  +--------+  +--------+  +-----+  |    |
-|  |  |Product |  |Analyst |  |Backend |  |Frontend|  | QA  |  |    |
-|  |  |Owner   |  |        |  |Dev     |  |Dev     |  |     |  |    |
-|  |  +--------+  +--------+  +--------+  +--------+  +-----+  |    |
-|  |      |           |           |           |          |      |    |
-|  |      v           v           v           v          v      |    |
-|  |  +--------------------------------------------------+     |    |
-|  |  |           AGENT BRAIN (Claude AI)                 |     |    |
-|  |  |  - Pensamento contextual                          |     |    |
-|  |  |  - Decisoes inteligentes                          |     |    |
-|  |  |  - Aprendizado continuo                           |     |    |
-|  |  +--------------------------------------------------+     |    |
-|  +----------------------------------------------------------+    |
-|                                |                                   |
-|  +----------------------------------------------------------+    |
-|  |                    SKILLS LAYER                           |    |
-|  |  +---------------+  +---------------+  +---------------+  |    |
-|  |  | Intelligent   |  | Real Skills   |  | Agent Memory  |  |    |
-|  |  | Skills (LLM)  |  | (Templates)   |  | (Persistent)  |  |    |
-|  |  +---------------+  +---------------+  +---------------+  |    |
-|  +----------------------------------------------------------+    |
-|                                |                                   |
-|  +----------------------------------------------------------+    |
-|  |                    OUTPUT GERADO                          |    |
-|  |  - Backend (FastAPI, SQLAlchemy, Pydantic)               |    |
-|  |  - Frontend (Vue.js 3, Composition API)                  |    |
-|  |  - Testes (pytest)                                        |    |
-|  |  - Documentacao                                           |    |
-|  +----------------------------------------------------------+    |
+|                   +------------v-------------+                     |
+|                   |      projects/ folder    |                     |
+|                   |   (Codigo Gerado)        |                     |
+|                   +--------------------------+                     |
 +------------------------------------------------------------------+
 ```
 
 ---
 
-## Os 108 Agentes
+## Componentes
 
-### Agentes Base (19)
+### 1. API REST (`factory/api/`)
 
-| ID | Nome | Funcao |
-|----|------|--------|
-| AGT-001 | Gestao Estrategica | Direcao estrategica |
-| AGT-002 | Product Manager | Roadmap e prioridades |
-| AGT-003 | Product Owner | User stories e backlog |
-| AGT-004 | Project Manager | Sprints e cronograma |
-| AGT-005 | Analista de Dados | Analise de requisitos |
-| AGT-006 | Engenheiro de Dados | Pipelines de dados |
-| AGT-007 | Especialista BD | SQLAlchemy, PostgreSQL |
-| AGT-008 | Backend Dev | FastAPI, Python |
-| AGT-009 | Frontend Dev | Vue.js, JavaScript |
-| AGT-010 | Especialista Seguranca | OWASP, autenticacao |
-| AGT-011 | Revisor de Codigo | Code review |
-| AGT-012 | DevOps | CI/CD, Docker |
-| AGT-013 | Arquiteto | Design patterns |
-| AGT-014 | Tech Lead | Lideranca tecnica |
-| AGT-015 | QA Engineer | Testes automatizados |
-| AGT-016 | Testador E2E | Cypress, Playwright |
-| AGT-017 | Documentador | Markdown, API docs |
-| AGT-018 | Designer UX | UI/UX |
-| AGT-019 | Integrador | APIs externas |
+| Componente | Arquivo | Responsabilidade |
+|------------|---------|------------------|
+| **Routes** | `routes.py` | Endpoints REST para jobs, workers e queue |
+| **Auth** | `auth.py` | Autenticacao JWT com chave persistente |
+| **Rate Limit** | `rate_limit.py` | Limitacao de requisicoes via Redis |
 
-### Agentes Especializados (53)
+**Endpoints Principais:**
+```
+POST   /api/v1/jobs           - Criar job de desenvolvimento
+GET    /api/v1/jobs/{id}      - Status do job
+GET    /api/v1/jobs           - Listar jobs
+DELETE /api/v1/jobs/{id}      - Cancelar job
+GET    /api/v1/queue/stats    - Estatisticas da fila
+GET    /api/v1/workers        - Listar workers ativos
+POST   /api/v1/auth/login     - Autenticacao
+GET    /api/v1/health         - Health check
+```
 
-| Dominio | Quantidade | Tecnologias |
-|---------|------------|-------------|
-| Frontend | 5 | React, Vue, Angular, TypeScript |
-| Backend | 5 | Python, Node.js, Java, .NET |
-| SAP ECC | 11 | FI, CO, MM, SD, PP, WM, QM, PM, HR, ABAP |
-| SAP S/4 HANA | 6 | Finance, Procurement, Manufacturing |
-| Salesforce | 5 | Admin, Dev, Sales Cloud |
-| Marketing Cloud | 4 | Email, Journey, Data |
-| Power BI | 3 | Reports, Data Engineering |
-| Azure | 5 | Architecture, Data, DevOps, AI |
-| Databricks | 4 | Data Engineering, ML, SQL |
+### 2. Core (`factory/core/`)
 
-### Agentes Corporativos (36)
+| Componente | Arquivo | Responsabilidade |
+|------------|---------|------------------|
+| **Job Queue** | `job_queue.py` | Fila Redis FIFO para jobs |
+| **Worker** | `worker.py` | Claude Worker que processa jobs |
+| **Autonomous Loop** | `autonomous_loop.py` | Loop Generate->Lint->Test->Fix |
 
-Sistema hierarquico completo com CEO, C-Level, VPs, Diretores, Gerentes e Analistas com sistema de aprovacao automatico.
+**Job Queue:**
+- Fila FIFO para jobs pendentes
+- Pub/Sub para eventos em tempo real
+- Fallback para SQLite se Redis indisponivel
+
+**Worker:**
+- Consome jobs da fila Redis
+- Executa autonomous loop com Claude API
+- Heartbeat para monitoramento de saude
+- Retries automaticos em caso de falha
+
+**Autonomous Loop:**
+```
+1. SETUP    - Prepara ambiente do projeto
+2. GENERATE - Gera codigo via Claude API
+3. LINT     - Executa linter (ruff/eslint)
+4. TEST     - Executa testes (pytest/jest)
+5. FIX      - Se erro, Claude corrige (max 5x)
+6. COMPLETE - Projeto pronto em projects/
+```
+
+### 3. Database (`factory/database/`)
+
+| Componente | Arquivo | Responsabilidade |
+|------------|---------|------------------|
+| **Connection** | `connection.py` | PostgreSQL + Redis + SQLite fallback |
+| **Models** | `models.py` | SQLAlchemy models (6 tabelas) |
+| **Repositories** | `repositories.py` | Camada de acesso a dados |
+
+**Modelos:**
+| Tabela | Descricao |
+|--------|-----------|
+| `projects` | Metadados de projetos |
+| `jobs` | Fila de trabalho (unidade principal) |
+| `workers` | Registro de workers ativos |
+| `failure_history` | Historico de falhas para analise |
+| `users` | Autenticacao de usuarios |
+| `activity_logs` | Logs de auditoria |
+
+### 4. Dashboard (`factory/dashboard/`)
+
+| Componente | Arquivo | Responsabilidade |
+|------------|---------|------------------|
+| **App** | `app_v4.py` | Dashboard Vue.js 3 worker-centric |
+
+**Funcionalidades:**
+- Visao geral da fila (pendentes, processando, completos)
+- Painel de workers (status, job atual, metricas)
+- Lista de jobs com filtros e progresso
+- Criacao de jobs via interface
+- Atualizacao automatica a cada 5 segundos
+
+### 5. Config (`factory/config.py`)
+
+Configuracoes centralizadas:
+- Paths do projeto
+- Conexoes de banco (PostgreSQL, Redis, SQLite)
+- Workers (min, max, timeouts)
+- Claude API (modelo, tokens)
+- Rate limiting
+- MCP tools
+
+### 6. Scripts (`factory/scripts/`)
+
+| Script | Comando | Descricao |
+|--------|---------|-----------|
+| `start_workers.py` | `python factory/scripts/start_workers.py -w 3` | Inicia pool de workers |
+| `start_all.py` | `python factory/scripts/start_all.py` | Inicia dashboard + workers |
+| `init_db.py` | `python factory/scripts/init_db.py --seed` | Inicializa banco de dados |
 
 ---
 
-## Instalacao Rapida
+## Instalacao
+
+### Pre-requisitos
+
+- Python 3.10+
+- Docker (para PostgreSQL + Redis)
+- Chave API Anthropic
+
+### Instalacao Rapida
 
 ```bash
 # Clone o repositorio
-git clone https://github.com/seu-usuario/fabrica-de-agentes.git
+git clone https://github.com/cruzpeanelo/fabrica-de-agentes.git
 cd fabrica-de-agentes
 
 # Ambiente virtual
@@ -168,18 +198,33 @@ venv\Scripts\activate     # Windows
 # Dependencias
 pip install -r requirements.txt
 
-# (Opcional) Habilitar inteligencia AI
-export ANTHROPIC_API_KEY=sk-ant-xxxx  # Linux/Mac
-set ANTHROPIC_API_KEY=sk-ant-xxxx     # Windows
+# Configurar ambiente
+cp .env.example .env
+# Edite .env e adicione sua ANTHROPIC_API_KEY
+
+# Iniciar infraestrutura (PostgreSQL + Redis)
+docker-compose up -d
 
 # Inicializar banco de dados
-python -c "from factory.database.connection import init_db; init_db()"
+python factory/scripts/init_db.py --seed
 
-# Iniciar dashboard
-python factory/dashboard/app.py
+# Iniciar tudo (Dashboard + Workers)
+python factory/scripts/start_all.py --workers 2
 ```
 
 **Acesse:** http://localhost:9000
+
+### Sem Docker (SQLite + Redis local)
+
+```bash
+# Se Redis instalado localmente
+redis-server &
+
+# Ou use apenas SQLite (sem Redis)
+# O sistema faz fallback automaticamente
+
+python factory/scripts/start_all.py
+```
 
 ---
 
@@ -188,150 +233,215 @@ python factory/dashboard/app.py
 ### Via Dashboard (Recomendado)
 
 1. Acesse http://localhost:9000
-2. Crie um novo projeto
-3. Adicione requisitos (upload de documentos ou texto)
-4. Clique em "Desenvolver Projeto"
-5. Acompanhe o progresso em tempo real
+2. Clique em "Novo Job"
+3. Preencha descricao e stack tecnologica
+4. Acompanhe o progresso em tempo real
+5. Projeto gerado em `projects/`
 
 ### Via API
 
 ```bash
-# Criar projeto
-curl -X POST http://localhost:9000/api/projects \
+# Autenticar
+TOKEN=$(curl -s -X POST http://localhost:9000/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"name": "Meu Projeto", "description": "Descricao"}'
+  -d '{"username": "admin", "password": "admin123"}' | jq -r '.access_token')
 
-# Processar requisitos e gerar stories
-curl -X POST http://localhost:9000/api/orchestrator/process/{project_id}
+# Criar job
+curl -X POST http://localhost:9000/api/v1/jobs \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "description": "API REST para gerenciamento de tarefas com autenticacao JWT",
+    "tech_stack": "python,fastapi,postgresql",
+    "features": ["CRUD de tarefas", "Autenticacao JWT", "Rate limiting"]
+  }'
 
-# Desenvolvimento autonomo (templates - rapido)
-curl -X POST http://localhost:9000/api/developer/develop/{project_id}
+# Verificar status
+curl http://localhost:9000/api/v1/jobs/{job_id} \
+  -H "Authorization: Bearer $TOKEN"
 
-# Desenvolvimento inteligente (com Claude AI)
-curl -X POST http://localhost:9000/api/intelligent-developer/develop/{project_id}
+# Ver estatisticas da fila
+curl http://localhost:9000/api/v1/queue/stats \
+  -H "Authorization: Bearer $TOKEN"
 
-# Monitorar progresso
-curl http://localhost:9000/api/intelligent-developer/status/{project_id}
+# Listar workers
+curl http://localhost:9000/api/v1/workers \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ### Via Python
 
 ```python
-from factory.orchestrator.intelligent_developer import get_intelligent_developer
+import asyncio
+from factory.core.job_queue import get_queue
 
-# Inicializa desenvolvedor inteligente
-developer = get_intelligent_developer()
-developer.start()
+async def create_job():
+    queue = await get_queue()
 
-# Desenvolve projeto
-result = developer.develop_project("PROJ-123")
-print(f"Arquivos criados: {result['files_created']}")
+    job = await queue.enqueue({
+        "description": "Sistema de blog com posts e comentarios",
+        "tech_stack": "python,fastapi,react",
+        "features": ["CRUD posts", "Comentarios", "Busca"]
+    })
+
+    print(f"Job criado: {job['job_id']}")
+
+    # Acompanhar status
+    while True:
+        status = await queue.get_job(job['job_id'])
+        print(f"Status: {status['status']} - {status['current_step']}")
+
+        if status['status'] in ['completed', 'failed']:
+            break
+
+        await asyncio.sleep(5)
+
+asyncio.run(create_job())
 ```
-
----
-
-## Skills Disponiveis (39 Skills)
-
-### Geracao de Codigo
-| Skill | Descricao |
-|-------|-----------|
-| `create_fastapi_router` | Router FastAPI com CRUD |
-| `create_sqlalchemy_model` | Modelo SQLAlchemy |
-| `create_vue_component` | Componente Vue.js |
-| `create_pydantic_schema` | Schemas Pydantic |
-| `create_test_file` | Testes pytest |
-
-### Analise Multimidia
-| Tipo | Formatos |
-|------|----------|
-| Texto | TXT, MD, PDF, DOCX, HTML |
-| Codigo | Python, JS, Java, SQL |
-| Imagens | PNG, JPG, GIF, SVG, WebP |
-| Audio | MP3, WAV, FLAC, OGG |
-| Video | MP4, AVI, MKV, MOV |
 
 ---
 
 ## Estrutura do Projeto
 
 ```
-Fabrica de Agentes/
+Fabrica de Workers/
 ├── factory/
-│   ├── ai/                      # Integracao com Claude AI
-│   │   ├── claude_integration.py  # ClaudeClient, AgentBrain
-│   │   └── __init__.py
-│   ├── agents/                  # Sistema de Agentes
-│   │   ├── corporate_hierarchy.py # Hierarquia corporativa
-│   │   └── profile_service.py     # Perfis de agentes
-│   ├── database/                # Banco de Dados
-│   │   ├── connection.py
-│   │   ├── models.py
-│   │   └── repositories.py
-│   ├── dashboard/               # Dashboard Web
-│   │   └── app.py               # FastAPI + endpoints
-│   ├── orchestrator/            # Orquestracao
-│   │   ├── intelligent_developer.py  # Desenvolvedor com AI
-│   │   ├── autonomous_developer.py   # Desenvolvedor com templates
-│   │   ├── project_orchestrator.py   # Processamento de projetos
-│   │   └── story_executor.py         # Execucao de stories
-│   ├── skills/                  # Habilidades dos Agentes
-│   │   ├── intelligent_skills.py     # Skills com LLM
-│   │   └── real_skills.py            # Skills com templates
-│   └── memory/                  # Memoria dos Agentes
-│       └── AGT-XXX_memory.json      # Memoria persistente
-├── projects/                    # Projetos Gerados
-│   ├── exemplo-projeto/         # Exemplo de projeto gerado
-│   │   ├── backend/
-│   │   │   ├── routers/
-│   │   │   ├── models/
-│   │   │   ├── schemas/
-│   │   │   └── tests/
-│   │   └── frontend/
-│   │       └── src/components/
-│   └── gestao-estrategica/      # Outro projeto
-├── docs/                        # Documentacao
-│   ├── ARCHITECTURE.md
-│   ├── BUSINESS_VALUE.md
-│   └── API.md
+│   ├── api/                    # API REST
+│   │   ├── routes.py           # Endpoints de jobs/workers
+│   │   ├── auth.py             # JWT authentication
+│   │   └── rate_limit.py       # Redis rate limiting
+│   ├── core/                   # Core do sistema
+│   │   ├── job_queue.py        # Redis job queue
+│   │   ├── worker.py           # Claude workers
+│   │   └── autonomous_loop.py  # Loop de desenvolvimento
+│   ├── database/               # Banco de dados
+│   │   ├── connection.py       # PostgreSQL + Redis + SQLite
+│   │   ├── models.py           # SQLAlchemy models
+│   │   └── repositories.py     # Data access layer
+│   ├── dashboard/              # Dashboard web
+│   │   └── app_v4.py           # FastAPI + Vue.js
+│   ├── scripts/                # Scripts de inicializacao
+│   │   ├── start_workers.py    # Launcher de workers
+│   │   ├── start_all.py        # Launcher completo
+│   │   └── init_db.py          # Inicializacao do banco
+│   └── config.py               # Configuracoes centralizadas
+├── projects/                   # Projetos gerados
+├── docker-compose.yml          # PostgreSQL + Redis
+├── .env.example                # Template de variaveis
+├── requirements.txt            # Dependencias Python
 └── README.md
 ```
 
 ---
 
-## Configuracao Avancada
+## Configuracao
 
-### Variáveis de Ambiente
+### Variaveis de Ambiente
 
 | Variavel | Descricao | Padrao |
 |----------|-----------|--------|
-| `ANTHROPIC_API_KEY` | Chave da API Claude | None (usa templates) |
-| `DASHBOARD_PORT` | Porta do dashboard | 9000 |
-| `DATABASE_URL` | URL do banco | sqlite:///factory.db |
+| `ANTHROPIC_API_KEY` | Chave API Claude **(obrigatorio)** | - |
+| `DATABASE_URL` | PostgreSQL connection string | SQLite local |
+| `REDIS_URL` | Redis connection string | redis://localhost:6379 |
+| `DEFAULT_WORKERS` | Workers iniciais | 2 |
+| `MAX_WORKERS` | Maximo de workers | 5 |
+| `CLAUDE_MODEL` | Modelo Claude | claude-sonnet-4-20250514 |
+| `RATE_LIMIT_REQUESTS` | Requisicoes por janela | 100 |
+| `RATE_LIMIT_WINDOW` | Janela em segundos | 60 |
+| `JWT_SECRET_KEY` | Chave JWT (gerada automaticamente) | - |
 
-### Modos de Operacao
+### docker-compose.yml
 
-1. **Modo Template** (sem API key): Geracao rapida usando templates pre-definidos
-2. **Modo Inteligente** (com API key): Geracao contextualizada usando Claude AI
+```yaml
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fabrica
+      POSTGRES_PASSWORD: fabrica_secret
+      POSTGRES_DB: fabrica_db
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+```
+
+---
+
+## Fluxo de Trabalho
+
+```
+1. Usuario cria JOB via API/Dashboard
+       |
+       v
+2. Job entra na REDIS QUEUE (FIFO)
+       |
+       v
+3. WORKER disponivel pega o job
+       |
+       v
+4. AUTONOMOUS LOOP executa:
+
+   [GENERATE] --> Claude gera codigo
+        |
+        v
+   [LINT] --> ruff/eslint valida
+        |
+        +---> Erro? --> [FIX] --> Claude corrige --> volta para LINT
+        |
+        v
+   [TEST] --> pytest/jest executa
+        |
+        +---> Erro? --> [FIX] --> Claude corrige --> volta para LINT
+        |
+        v
+   [COMPLETE] --> Projeto salvo em projects/
+
+5. Status atualizado em tempo real via Redis Pub/Sub
+```
+
+---
+
+## Comparacao: v3.0 vs v4.0
+
+| Aspecto | v3.0 (Agentes) | v4.0 (Workers) |
+|---------|----------------|----------------|
+| Unidade de trabalho | 19 agentes especializados | 2-5 workers genericos |
+| Coordenacao | Complexa entre agentes | Fila simples Redis |
+| Escalabilidade | Dificil | Horizontal (mais workers) |
+| Banco | SQLite apenas | PostgreSQL + Redis |
+| API | 80+ endpoints | ~15 endpoints |
+| Dashboard | 5000+ linhas | ~800 linhas |
+| Auto-correcao | Limitada | Loop ate 5 tentativas |
 
 ---
 
 ## Roadmap
 
-### v1.0 (Atual)
-- [x] 108 Agentes autonomos
-- [x] Integracao com Claude AI
-- [x] Geracao de codigo backend/frontend
-- [x] Sistema de memoria e aprendizado
-- [x] Dashboard de monitoramento
-- [x] API REST completa
-- [x] 39 Skills multimidia
+### v4.0 (Atual)
+- [x] Workers Claude com pool configuravel
+- [x] Redis Queue para jobs
+- [x] PostgreSQL + Redis infrastructure
+- [x] Autonomous loop (Generate -> Lint -> Test -> Fix)
+- [x] JWT authentication persistente
+- [x] Rate limiting via Redis
+- [x] Dashboard worker-centric
+- [x] API simplificada
 
-### v2.0 (Planejado)
-- [ ] Suporte a mais linguagens (Java, Go, TypeScript)
-- [ ] Integracao com GitHub/GitLab
-- [ ] Deploy automatico (Docker, Kubernetes)
-- [ ] Marketplace de skills
+### v4.1 (Planejado)
+- [ ] WebSocket para atualizacoes em tempo real
+- [ ] Multiplos modelos Claude (Opus, Haiku)
+- [ ] MCP tools integration
+- [ ] Logs estruturados (ELK stack)
+
+### v5.0 (Futuro)
 - [ ] Multi-tenant (SaaS)
+- [ ] Kubernetes deployment
+- [ ] CI/CD integrado
+- [ ] Marketplace de templates
 
 ---
 
@@ -359,5 +469,5 @@ MIT License - Veja [LICENSE](LICENSE) para detalhes.
 ---
 
 <p align="center">
-  <strong>Fabrica de Agentes</strong> - Transformando ideias em software, automaticamente.
+  <strong>Fabrica de Workers</strong> - Desenvolvimento autonomo com Claude AI
 </p>

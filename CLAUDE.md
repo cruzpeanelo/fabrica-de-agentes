@@ -1,239 +1,283 @@
-# Fabrica de Agentes
+# Fabrica de Workers
 
-## Sistema de Agentes Autonomos para Construcao de Aplicacoes
+## Sistema de Desenvolvimento Autonomo com Workers Claude
 
-A **Fabrica de Agentes** eh uma plataforma que utiliza 19 agentes autonomos trabalhando em paralelo para construir qualquer tipo de aplicacao, realizar analises de dados, gerar documentos e muito mais.
+A **Fabrica de Workers** e uma plataforma que utiliza workers Claude para construir software de forma automatizada. Cada worker executa um loop autonomo de geracao, validacao e correcao.
 
 ### Dashboard de Monitoramento
 
 O dashboard esta disponivel em **http://localhost:9000** e mostra em tempo real:
-- Projetos ativos e seu progresso
-- Status dos agentes (EXECUTANDO, STANDBY, ERRO)
-- Skills disponiveis (Core, MCP, Vessel)
-- Logs de atividades
+- Fila de jobs (pendentes, processando, completos)
+- Status dos workers (ativo, idle, erro)
+- Progresso de cada job (etapa atual, iteracoes)
+- Estatisticas da fila
+
+## Arquitetura v4.0
+
+```
+User Request -> FastAPI (JWT/Rate Limit) -> Redis Queue -> Worker Pool (2-5)
+                                                              |
+                                                       Claude API
+                                                              |
+                                          Loop: Generate -> Lint -> Test -> Fix (max 5x)
+                                                              |
+                                                       projects/ folder
+```
 
 ## Estrutura do Projeto
 
 ```
-Fabrica de Agentes/
-├── factory/                    # Core da fabrica
-│   ├── database/               # SQLite + SQLAlchemy
-│   │   ├── factory.db          # Banco de dados principal
-│   │   ├── models.py           # Modelos de dados
-│   │   ├── repositories.py     # Repositorios
-│   │   └── seed.py             # Dados iniciais
-│   ├── dashboard/              # Dashboard web (porta 9000)
-│   │   └── app.py              # FastAPI + Vue.js
-│   ├── core/                   # Componentes centrais
-│   │   └── project_manager.py  # Gerenciador de projetos
-│   ├── skills/                 # Sistema de skills
-│   │   └── skill_manager.py    # Gerenciador de skills
-│   ├── config.py               # Configuracoes
-│   └── log_activity.py         # CLI para registrar atividades
-├── projects/                   # Projetos construidos (cada um em pasta separada)
-├── templates/                  # Templates de projetos
-│   ├── web-app/
-│   ├── api-service/
-│   ├── data-analysis/
-│   └── document/
-└── .claude/                    # Configuracao Claude Code
+Fabrica de Workers/
+├── factory/
+│   ├── api/                    # API REST
+│   │   ├── routes.py           # Endpoints de jobs/workers/queue
+│   │   ├── auth.py             # JWT authentication
+│   │   └── rate_limit.py       # Redis rate limiting
+│   ├── core/                   # Core do sistema
+│   │   ├── job_queue.py        # Redis job queue (FIFO)
+│   │   ├── worker.py           # Claude workers + WorkerPool
+│   │   └── autonomous_loop.py  # Loop Generate->Lint->Test->Fix
+│   ├── database/               # Banco de dados
+│   │   ├── connection.py       # PostgreSQL + Redis + SQLite fallback
+│   │   ├── models.py           # SQLAlchemy models (6 tabelas)
+│   │   └── repositories.py     # Data access layer
+│   ├── dashboard/              # Dashboard web
+│   │   └── app_v4.py           # FastAPI + Vue.js 3
+│   ├── scripts/                # Scripts de inicializacao
+│   │   ├── start_workers.py    # Launcher de workers
+│   │   ├── start_all.py        # Launcher full stack
+│   │   └── init_db.py          # Inicializacao do banco
+│   └── config.py               # Configuracoes centralizadas
+├── projects/                   # Projetos gerados pelos workers
+├── docker-compose.yml          # PostgreSQL + Redis
+├── .env.example                # Template de variaveis
+└── requirements.txt            # Dependencias Python
 ```
 
 ## Iniciando a Fabrica
 
 ```bash
-# 1. Inicializar banco de dados e dados iniciais
-python factory/database/seed.py
+# 1. Iniciar infraestrutura (PostgreSQL + Redis)
+docker-compose up -d
 
-# 2. Iniciar dashboard
-python factory/dashboard/app.py
+# 2. Inicializar banco de dados
+python factory/scripts/init_db.py --seed
+
+# 3. Iniciar stack completa
+python factory/scripts/start_all.py --workers 2
 
 # Dashboard disponivel em: http://localhost:9000
+# API Docs: http://localhost:9000/docs
 ```
 
-## Registro de Atividades
+## Componentes Principais
 
-**TODAS as atividades dos agentes DEVEM ser registradas no banco de dados** para aparecerem no dashboard.
+### 1. Job Queue (`factory/core/job_queue.py`)
 
-### Como Registrar Atividades
+Gerencia fila de jobs usando Redis (com fallback SQLite).
 
-Use o script `factory/log_activity.py`:
+```python
+from factory.core.job_queue import get_queue
 
-```bash
-# Ao INICIAR uma tarefa:
-python factory/log_activity.py -a 08 -t task_start -m "Criando API" -p PRJ-001 -s US-001
+queue = await get_queue()
 
-# Durante execucao:
-python factory/log_activity.py -a 08 -t info -m "Processando dados..."
+# Criar job
+job = await queue.enqueue({
+    "description": "API REST para e-commerce",
+    "tech_stack": "python,fastapi",
+    "features": ["CRUD produtos", "Carrinho", "Checkout"]
+})
 
-# Ao CONCLUIR uma tarefa:
-python factory/log_activity.py -a 08 -t task_complete -m "Tarefa finalizada" -r "5 endpoints criados"
-
-# Em caso de ERRO:
-python factory/log_activity.py -a 08 -t error -m "Erro ao processar arquivo"
+# Verificar status
+status = await queue.get_job(job['job_id'])
+print(f"Status: {status['status']} - Etapa: {status['current_step']}")
 ```
 
-### Acoes Disponiveis
+### 2. Worker (`factory/core/worker.py`)
 
-| Acao | Descricao | Efeito |
-|------|-----------|--------|
-| `task_start` | Inicio de tarefa | Marca agente como EXECUTING |
-| `task_complete` | Tarefa concluida | Marca agente como STANDBY |
-| `task_fail` | Tarefa falhou | Marca agente como ERROR |
-| `info` | Log informativo | Registra mensagem INFO |
-| `warning` | Aviso | Registra mensagem WARNING |
-| `error` | Erro | Registra mensagem ERROR |
-| `project_start` | Iniciar projeto | Registra inicio de projeto |
-| `project_complete` | Projeto concluido | Registra conclusao de projeto |
-| `story_start` | Iniciar story | Registra inicio de story |
-| `story_complete` | Story concluida | Registra conclusao de story |
-| `code_gen` | Codigo gerado | Registra criacao de arquivo |
-| `decision` | Decisao tecnica | Registra decisao tomada |
-| `skill_exec` | Skill executada | Registra uso de skill |
+Workers Claude que processam jobs da fila.
 
-## Agentes Disponiveis
+```python
+from factory.core.worker import WorkerPool
 
-### Management (01-04)
-| ID | Nome | Role | Descricao |
-|----|------|------|-----------|
-| 01 | Gestao Estrategica | Orquestrador | Coordenacao geral, OKRs, decisoes |
-| 02 | Product Manager | Gerente Produto | Roadmap, priorizacao, estrategia |
-| 03 | Product Owner | Dono Produto | Backlog, user stories, criterios |
-| 04 | Project Manager | Gerente Projeto | Sprints, riscos, tracking |
+pool = WorkerPool(num_workers=3, model="claude-sonnet-4-20250514")
+await pool.start_all()
+```
 
-### Data (05-07)
-| ID | Nome | Role | Descricao |
-|----|------|------|-----------|
-| 05 | Analista de Dados | Analista | SQL, KPIs, visualizacao |
-| 06 | Engenheiro de Dados | Engenheiro | ETL, pipelines, qualidade |
-| 07 | Especialista BD | DBA | Schema, indices, performance |
+### 3. Autonomous Loop (`factory/core/autonomous_loop.py`)
 
-### Development (08-10)
-| ID | Nome | Role | Descricao |
-|----|------|------|-----------|
-| 08 | Especialista Backend | Backend Dev | APIs, servicos, logica |
-| 09 | Desenvolvedor Frontend | Frontend Dev | React, componentes, UI |
-| 10 | Especialista Seguranca | Security | Auth, auditoria, vulnerabilidades |
+Loop de desenvolvimento com auto-correcao.
 
-### Design (11-12)
-| ID | Nome | Role | Descricao |
-|----|------|------|-----------|
-| 11 | Especialista UX | UX Designer | Wireframes, fluxos, pesquisa |
-| 12 | Especialista UI | UI Designer | Design system, visual, tokens |
-
-### Quality (13, 15-16)
-| ID | Nome | Role | Descricao |
-|----|------|------|-----------|
-| 13 | Revisor de Codigo | Code Reviewer | Review, boas praticas, refactoring |
-| 15 | Testador QA | QA Engineer | Testes, automacao, qualidade |
-| 16 | Testador E2E | E2E Engineer | Playwright, browser tests |
-
-### Infrastructure & Integration (14, 17-19)
-| ID | Nome | Role | Descricao |
-|----|------|------|-----------|
-| 14 | Engenheiro DevOps | DevOps | CI/CD, deploy, monitoring |
-| 17 | Documentador | Tech Writer | Documentacao, guias, API docs |
-| 18 | Arquiteto | Solution Architect | Arquitetura, patterns, design |
-| 19 | Integrador | Integration Specialist | APIs, webhooks, conectores |
-
-## Tipos de Projetos Suportados
-
-| Tipo | Descricao | Agentes Recomendados |
-|------|-----------|----------------------|
-| `web-app` | Aplicacao web fullstack | 01, 02, 03, 04, 08, 09, 11, 12, 15 |
-| `api-service` | Servico de API REST/GraphQL | 01, 03, 04, 07, 08, 10, 15 |
-| `data-analysis` | Analise e visualizacao de dados | 01, 03, 05, 06, 07 |
-| `document` | Geracao de documentos/relatorios | 01, 03, 17 |
-| `automation` | Scripts e automacoes | 01, 03, 08, 14, 19 |
-| `integration` | Integracoes entre sistemas | 01, 03, 08, 18, 19 |
-
-## Sistema de Skills
-
-### Skills Core
-- `file-read`, `file-write`, `file-search` - Operacoes de arquivo
-- `web-fetch`, `web-search` - Operacoes web
-- `bash-execute` - Execucao de comandos
-- `sql-query`, `data-transform` - Dados
-
-### Skills MCP (Model Context Protocol)
-- `mcp-playwright` - Automacao de browser
-- `mcp-filesystem` - Operacoes avancadas de arquivo
-- `mcp-github` - Integracao GitHub
-- `mcp-memory` - Memoria persistente
-
-### Skills Vessel (futuro)
-- `vessel-container` - Execucao isolada em container
-- `vessel-sandbox` - Ambiente sandbox para testes
+```
+1. SETUP    - Prepara ambiente
+2. GENERATE - Claude gera codigo
+3. LINT     - Valida com ruff/eslint
+4. TEST     - Executa pytest/jest
+5. FIX      - Claude corrige erros (max 5x)
+6. COMPLETE - Projeto pronto
+```
 
 ## API Endpoints
 
-### Status
+### Jobs
 ```bash
-GET /api/status
+POST   /api/v1/jobs           # Criar job
+GET    /api/v1/jobs           # Listar jobs
+GET    /api/v1/jobs/{id}      # Status do job
+DELETE /api/v1/jobs/{id}      # Cancelar job
 ```
 
-### Projetos
+### Queue
 ```bash
-GET  /api/projects           # Lista projetos
-POST /api/projects           # Cria projeto
-GET  /api/projects/{id}      # Busca projeto
-PUT  /api/projects/{id}      # Atualiza projeto
-DELETE /api/projects/{id}    # Remove projeto
+GET    /api/v1/queue/stats    # Estatisticas da fila
+GET    /api/v1/queue/peek     # Ver proximos jobs
 ```
 
-### Stories
+### Workers
 ```bash
-GET  /api/stories            # Lista stories
-POST /api/stories            # Cria story
-PUT  /api/stories/{id}       # Atualiza story
+GET    /api/v1/workers        # Listar workers
+GET    /api/v1/workers/{id}   # Detalhes do worker
 ```
 
-### Agentes
+### Auth
 ```bash
-GET /api/agents              # Lista agentes
-PUT /api/agents/{id}         # Atualiza agente
+POST   /api/v1/auth/login     # Autenticar (retorna JWT)
+GET    /api/v1/auth/me        # Usuario atual
+POST   /api/v1/auth/refresh   # Renovar token
 ```
 
-### Skills
+### Health
 ```bash
-GET /api/skills              # Lista skills
+GET    /api/v1/health         # Health check basico
+GET    /api/v1/health/detailed # Health check detalhado
 ```
 
-### Logs
-```bash
-GET /api/logs                # Lista logs (query: project_id, agent_id, level, limit)
-```
+## Exemplo: Criando um Job
 
-## Exemplo: Criando um Novo Projeto
-
+### Via API
 ```bash
-# Via API
-curl -X POST http://localhost:9000/api/projects \
+# Autenticar
+TOKEN=$(curl -s -X POST http://localhost:9000/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"name": "Meu App", "project_type": "web-app", "description": "Descricao do app"}'
+  -d '{"username": "admin", "password": "admin123"}' | jq -r '.access_token')
 
-# Via Python
-from factory.core.project_manager import get_project_manager
-
-pm = get_project_manager()
-project = pm.create_project(
-    name="Meu App",
-    project_type="web-app",
-    description="Descricao do app"
-)
-print(f"Projeto criado: {project['project_id']}")
+# Criar job
+curl -X POST http://localhost:9000/api/v1/jobs \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "description": "Sistema de gerenciamento de tarefas",
+    "tech_stack": "python,fastapi,postgresql",
+    "features": ["CRUD tarefas", "Usuarios", "Categorias"]
+  }'
 ```
 
-## Workflow Tipico
+### Via Python
+```python
+import asyncio
+from factory.core.job_queue import get_queue
 
-1. **Criar Projeto** via dashboard ou API
-2. **Atribuir Agentes** ao projeto
-3. **Criar Stories** com tarefas
-4. **Agentes Executam** as tarefas em paralelo
-5. **Registrar Atividades** no banco de dados
-6. **Monitorar Progresso** no dashboard
-7. **Projeto Concluido** na pasta `projects/`
+async def main():
+    queue = await get_queue()
+
+    job = await queue.enqueue({
+        "description": "Blog com posts e comentarios",
+        "tech_stack": "python,fastapi,react",
+        "features": ["Posts", "Comentarios", "Tags"]
+    })
+
+    print(f"Job criado: {job['job_id']}")
+
+asyncio.run(main())
+```
+
+## Workflow do Job
+
+```
+1. Job CRIADO via API/Dashboard
+       |
+       v
+2. Job entra na FILA Redis (status: pending)
+       |
+       v
+3. Worker PEGA job (status: running)
+       |
+       v
+4. Autonomous Loop EXECUTA:
+   - GENERATE: Claude cria codigo
+   - LINT: Valida sintaxe/estilo
+   - TEST: Executa testes
+   - FIX: Corrige erros (se houver)
+       |
+       v
+5. Job COMPLETO (status: completed)
+   - Codigo em projects/{job_id}/
+```
+
+## Modelos de Dados
+
+### Job
+| Campo | Tipo | Descricao |
+|-------|------|-----------|
+| job_id | string | ID unico (JOB-YYYYMMDDHHMMSS-XXXX) |
+| description | string | O que construir |
+| tech_stack | string | Stack tecnologica |
+| features | list | Lista de features |
+| status | enum | pending/running/completed/failed/cancelled |
+| current_step | string | Etapa atual do loop |
+| progress | float | 0.0 a 1.0 |
+| worker_id | string | Worker processando |
+| output_path | string | Caminho do projeto gerado |
+| error_message | string | Mensagem de erro (se falhou) |
+
+### Worker
+| Campo | Tipo | Descricao |
+|-------|------|-----------|
+| worker_id | string | ID unico (worker-XXXX) |
+| status | enum | idle/busy/error |
+| current_job_id | string | Job sendo processado |
+| model | string | Modelo Claude |
+| jobs_completed | int | Total de jobs completos |
+| jobs_failed | int | Total de falhas |
+| avg_job_duration | float | Duracao media (segundos) |
+
+## Configuracoes
+
+### Variaveis de Ambiente (.env)
+```bash
+# Claude API (obrigatorio)
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Database
+DATABASE_URL=postgresql+asyncpg://fabrica:fabrica_secret@localhost:5432/fabrica_db
+REDIS_URL=redis://localhost:6379
+
+# Workers
+DEFAULT_WORKERS=2
+MAX_WORKERS=5
+WORKER_TIMEOUT=600
+
+# Claude
+CLAUDE_MODEL=claude-sonnet-4-20250514
+CLAUDE_MAX_TOKENS=4096
+
+# Rate Limiting
+RATE_LIMIT_REQUESTS=100
+RATE_LIMIT_WINDOW=60
+
+# Dashboard
+DASHBOARD_PORT=9000
+```
+
+## Scripts Disponiveis
+
+| Script | Comando | Descricao |
+|--------|---------|-----------|
+| Start All | `python factory/scripts/start_all.py` | Dashboard + Workers |
+| Start Workers | `python factory/scripts/start_workers.py -w 3` | Apenas workers |
+| Init DB | `python factory/scripts/init_db.py --seed` | Criar tabelas + dados |
+| Dashboard | `python factory/dashboard/app_v4.py` | Apenas dashboard |
 
 ---
 
-*Fabrica de Agentes v2.0 - Sistema de agentes autonomos para construcao de aplicacoes*
+*Fabrica de Workers v4.0 - Desenvolvimento autonomo com Claude AI*

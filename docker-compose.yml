@@ -1,51 +1,71 @@
-# Fabrica de Agentes - Docker Compose
+# Fabrica de Agentes v4.0 - Docker Compose
 # Usage: docker-compose up -d
+# Services: PostgreSQL + Redis for new worker-based architecture
 
 version: '3.8'
 
 services:
-  fabrica-agentes:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: fabrica-agentes:latest
-    container_name: fabrica-agentes
-    ports:
-      - "9000:9000"
-    volumes:
-      # Persist database
-      - ./factory/database:/app/factory/database
-      # Persist agent memories
-      - ./factory/memory:/app/factory/memory
-      # Persist generated projects
-      - ./projects:/app/projects
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: fabrica-postgres
     environment:
-      - PYTHONUNBUFFERED=1
-      # Optional: Add your Anthropic API key for intelligent mode
-      # - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-    restart: unless-stopped
+      POSTGRES_USER: fabrica
+      POSTGRES_PASSWORD: fabrica_secret
+      POSTGRES_DB: fabrica_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/api/agents')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+      test: ["CMD-SHELL", "pg_isready -U fabrica -d fabrica_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
-  # Optional: Add Redis for caching (future feature)
-  # redis:
-  #   image: redis:7-alpine
-  #   container_name: fabrica-redis
+  # Redis for Job Queue and Cache
+  redis:
+    image: redis:7-alpine
+    container_name: fabrica-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Factory API (optional - can run locally for development)
+  # fabrica-api:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   image: fabrica-agentes:latest
+  #   container_name: fabrica-api
   #   ports:
-  #     - "6379:6379"
+  #     - "9000:9000"
   #   volumes:
-  #     - redis_data:/data
+  #     - ./projects:/app/projects
+  #   environment:
+  #     - PYTHONUNBUFFERED=1
+  #     - DATABASE_URL=postgresql://fabrica:fabrica_secret@postgres:5432/fabrica_db
+  #     - REDIS_URL=redis://redis:6379
+  #     - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
   #   restart: unless-stopped
 
 volumes:
-  database_data:
-  memory_data:
-  projects_data:
-  # redis_data:
+  postgres_data:
+  redis_data:
 
 networks:
   default:

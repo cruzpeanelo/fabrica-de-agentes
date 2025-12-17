@@ -1,7 +1,7 @@
 """
 Repositorios para acesso ao banco de dados - Fabrica de Agentes
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, and_, or_
@@ -9,7 +9,9 @@ from sqlalchemy import desc, and_, or_
 from .models import (
     Project, Story, Agent, Skill, Task, Sprint,
     ActivityLog, FactoryEvent, Template, User,
-    ProjectStatus, AgentStatus, TaskStatus, SkillType
+    ProjectStatus, AgentStatus, TaskStatus, SkillType,
+    # Nova Arquitetura MVP
+    Job, JobStatus, JobStep, FailureHistory, Worker
 )
 
 
@@ -521,3 +523,328 @@ class UserRepository:
             user.last_login = datetime.utcnow()
             self.db.commit()
         return user
+
+
+# =============================================================================
+# JOB REPOSITORY - Nova Arquitetura MVP
+# =============================================================================
+
+class JobRepository:
+    """Repositorio para gerenciamento de Jobs - Nova Arquitetura MVP"""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def create(self, job_data: dict) -> Job:
+        """Cria novo job"""
+        # Gera job_id automaticamente se nao fornecido
+        if "job_id" not in job_data:
+            count = self.db.query(Job).count()
+            job_data["job_id"] = f"JOB-{count + 1:04d}"
+
+        job = Job(**job_data)
+        self.db.add(job)
+        self.db.commit()
+        self.db.refresh(job)
+        return job
+
+    def get_by_id(self, job_id: str) -> Optional[Job]:
+        """Busca job por ID"""
+        return self.db.query(Job).filter(Job.job_id == job_id).first()
+
+    def get_all(self, status: str = None, limit: int = 100) -> List[Job]:
+        """Lista todos os jobs com filtros opcionais"""
+        query = self.db.query(Job)
+        if status:
+            query = query.filter(Job.status == status)
+        return query.order_by(desc(Job.created_at)).limit(limit).all()
+
+    def get_pending(self) -> List[Job]:
+        """Lista jobs pendentes na fila (FIFO)"""
+        return self.db.query(Job).filter(
+            Job.status.in_([JobStatus.PENDING.value, JobStatus.QUEUED.value])
+        ).order_by(Job.queued_at).all()
+
+    def get_next_pending(self) -> Optional[Job]:
+        """Retorna proximo job pendente para processamento"""
+        return self.db.query(Job).filter(
+            Job.status == JobStatus.PENDING.value
+        ).order_by(Job.queued_at).first()
+
+    def get_running(self) -> List[Job]:
+        """Lista jobs em execucao"""
+        return self.db.query(Job).filter(
+            Job.status == JobStatus.RUNNING.value
+        ).all()
+
+    def get_by_project(self, project_id: str) -> List[Job]:
+        """Lista jobs de um projeto"""
+        return self.db.query(Job).filter(
+            Job.project_id == project_id
+        ).order_by(desc(Job.created_at)).all()
+
+    def get_by_worker(self, worker_id: str) -> List[Job]:
+        """Lista jobs de um worker"""
+        return self.db.query(Job).filter(
+            Job.worker_id == worker_id
+        ).order_by(desc(Job.created_at)).all()
+
+    def update(self, job_id: str, data: dict) -> Optional[Job]:
+        """Atualiza job"""
+        job = self.get_by_id(job_id)
+        if job:
+            for key, value in data.items():
+                if hasattr(job, key) and value is not None:
+                    setattr(job, key, value)
+            job.updated_at = datetime.utcnow()
+            self.db.commit()
+            self.db.refresh(job)
+        return job
+
+    def update_status(self, job_id: str, status: str, step: str = None) -> Optional[Job]:
+        """Atualiza status e step do job"""
+        job = self.get_by_id(job_id)
+        if job:
+            job.status = status
+            if step:
+                job.current_step = step
+            if status == JobStatus.RUNNING.value and not job.started_at:
+                job.started_at = datetime.utcnow()
+            elif status in [JobStatus.COMPLETED.value, JobStatus.FAILED.value]:
+                job.completed_at = datetime.utcnow()
+            job.updated_at = datetime.utcnow()
+            self.db.commit()
+            self.db.refresh(job)
+        return job
+
+    def add_step_log(self, job_id: str, step: str, message: str, success: bool = True) -> Optional[Job]:
+        """Adiciona log de um step"""
+        job = self.get_by_id(job_id)
+        if job:
+            logs = job.step_logs or []
+            logs.append({
+                "step": step,
+                "message": message,
+                "success": success,
+                "timestamp": datetime.utcnow().isoformat()
+            })
+            job.step_logs = logs
+            self.db.commit()
+        return job
+
+    def increment_attempt(self, job_id: str) -> Optional[Job]:
+        """Incrementa tentativa do loop"""
+        job = self.get_by_id(job_id)
+        if job:
+            job.current_attempt += 1
+            job.total_iterations += 1
+            self.db.commit()
+            self.db.refresh(job)
+        return job
+
+    def assign_worker(self, job_id: str, worker_id: str) -> Optional[Job]:
+        """Atribui worker ao job"""
+        job = self.get_by_id(job_id)
+        if job:
+            job.worker_id = worker_id
+            job.status = JobStatus.RUNNING.value
+            job.started_at = datetime.utcnow()
+            self.db.commit()
+            self.db.refresh(job)
+        return job
+
+    def count_by_status(self) -> Dict[str, int]:
+        """Conta jobs por status"""
+        result = {}
+        for status in JobStatus:
+            count = self.db.query(Job).filter(Job.status == status.value).count()
+            result[status.value] = count
+        return result
+
+    def delete(self, job_id: str) -> bool:
+        """Remove job"""
+        job = self.get_by_id(job_id)
+        if job:
+            self.db.delete(job)
+            self.db.commit()
+            return True
+        return False
+
+
+# =============================================================================
+# FAILURE HISTORY REPOSITORY - Nova Arquitetura MVP
+# =============================================================================
+
+class FailureHistoryRepository:
+    """Repositorio para gerenciamento de Historico de Falhas"""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def create(self, failure_data: dict) -> FailureHistory:
+        """Registra nova falha"""
+        failure = FailureHistory(**failure_data)
+        self.db.add(failure)
+        self.db.commit()
+        self.db.refresh(failure)
+        return failure
+
+    def get_by_job(self, job_id: str) -> List[FailureHistory]:
+        """Lista falhas de um job"""
+        return self.db.query(FailureHistory).filter(
+            FailureHistory.job_id == job_id
+        ).order_by(desc(FailureHistory.created_at)).all()
+
+    def get_by_step(self, job_id: str, step: str) -> List[FailureHistory]:
+        """Lista falhas de um step especifico"""
+        return self.db.query(FailureHistory).filter(
+            FailureHistory.job_id == job_id,
+            FailureHistory.step == step
+        ).all()
+
+    def count_failures(self, job_id: str, step: str) -> int:
+        """Conta falhas de um step (para verificar max attempts)"""
+        return self.db.query(FailureHistory).filter(
+            FailureHistory.job_id == job_id,
+            FailureHistory.step == step
+        ).count()
+
+    def has_similar_failure(self, job_id: str, error_type: str) -> bool:
+        """Verifica se ja houve falha similar (prevenir retry loops)"""
+        return self.db.query(FailureHistory).filter(
+            FailureHistory.job_id == job_id,
+            FailureHistory.error_type == error_type,
+            FailureHistory.resolved == False
+        ).count() > 2  # Se mais de 2 falhas iguais nao resolvidas, retorna True
+
+    def get_recent(self, limit: int = 50) -> List[FailureHistory]:
+        """Lista falhas recentes"""
+        return self.db.query(FailureHistory).order_by(
+            desc(FailureHistory.created_at)
+        ).limit(limit).all()
+
+    def mark_resolved(self, failure_id: int, notes: str = None) -> Optional[FailureHistory]:
+        """Marca falha como resolvida"""
+        failure = self.db.query(FailureHistory).filter(
+            FailureHistory.id == failure_id
+        ).first()
+        if failure:
+            failure.resolved = True
+            failure.resolution_notes = notes
+            failure.resolved_at = datetime.utcnow()
+            self.db.commit()
+            self.db.refresh(failure)
+        return failure
+
+
+# =============================================================================
+# WORKER REPOSITORY - Nova Arquitetura MVP
+# =============================================================================
+
+class WorkerRepository:
+    """Repositorio para gerenciamento de Workers"""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def create(self, worker_data: dict) -> Worker:
+        """Registra novo worker"""
+        worker = Worker(**worker_data)
+        self.db.add(worker)
+        self.db.commit()
+        self.db.refresh(worker)
+        return worker
+
+    def get_by_id(self, worker_id: str) -> Optional[Worker]:
+        """Busca worker por ID"""
+        return self.db.query(Worker).filter(Worker.worker_id == worker_id).first()
+
+    def get_all(self) -> List[Worker]:
+        """Lista todos os workers"""
+        return self.db.query(Worker).order_by(Worker.started_at).all()
+
+    def get_active(self) -> List[Worker]:
+        """Lista workers ativos (com heartbeat recente)"""
+        threshold = datetime.utcnow() - timedelta(minutes=5)
+        return self.db.query(Worker).filter(
+            Worker.status != "offline",
+            Worker.last_heartbeat >= threshold
+        ).all()
+
+    def get_idle(self) -> List[Worker]:
+        """Lista workers disponiveis"""
+        return self.db.query(Worker).filter(
+            Worker.status == "idle"
+        ).all()
+
+    def get_or_create(self, worker_id: str, **kwargs) -> Worker:
+        """Busca ou cria worker"""
+        worker = self.get_by_id(worker_id)
+        if not worker:
+            worker = Worker(worker_id=worker_id, **kwargs)
+            self.db.add(worker)
+            self.db.commit()
+            self.db.refresh(worker)
+        return worker
+
+    def update_status(self, worker_id: str, status: str, job_id: str = None) -> Optional[Worker]:
+        """Atualiza status do worker"""
+        worker = self.get_by_id(worker_id)
+        if worker:
+            worker.status = status
+            worker.current_job_id = job_id
+            worker.last_heartbeat = datetime.utcnow()
+            self.db.commit()
+            self.db.refresh(worker)
+        return worker
+
+    def heartbeat(self, worker_id: str) -> Optional[Worker]:
+        """Atualiza heartbeat do worker"""
+        worker = self.get_by_id(worker_id)
+        if worker:
+            worker.last_heartbeat = datetime.utcnow()
+            self.db.commit()
+        return worker
+
+    def increment_completed(self, worker_id: str, duration_seconds: int) -> Optional[Worker]:
+        """Incrementa contador de jobs completados"""
+        worker = self.get_by_id(worker_id)
+        if worker:
+            worker.jobs_completed += 1
+            worker.total_processing_time += duration_seconds
+            worker.avg_job_duration = worker.total_processing_time / worker.jobs_completed
+            worker.status = "idle"
+            worker.current_job_id = None
+            self.db.commit()
+            self.db.refresh(worker)
+        return worker
+
+    def increment_failed(self, worker_id: str) -> Optional[Worker]:
+        """Incrementa contador de jobs falhados"""
+        worker = self.get_by_id(worker_id)
+        if worker:
+            worker.jobs_failed += 1
+            worker.status = "idle"
+            worker.current_job_id = None
+            self.db.commit()
+            self.db.refresh(worker)
+        return worker
+
+    def mark_offline(self, worker_id: str) -> Optional[Worker]:
+        """Marca worker como offline"""
+        worker = self.get_by_id(worker_id)
+        if worker:
+            worker.status = "offline"
+            worker.current_job_id = None
+            self.db.commit()
+            self.db.refresh(worker)
+        return worker
+
+    def cleanup_stale(self, timeout_minutes: int = 10) -> int:
+        """Remove workers inativos"""
+        threshold = datetime.utcnow() - timedelta(minutes=timeout_minutes)
+        count = self.db.query(Worker).filter(
+            Worker.last_heartbeat < threshold
+        ).update({"status": "offline", "current_job_id": None})
+        self.db.commit()
+        return count
