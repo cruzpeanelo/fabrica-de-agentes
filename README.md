@@ -18,8 +18,10 @@
 - [Como Funciona](#como-funciona)
 - [Casos de Uso](#casos-de-uso)
 - [ROI e Metricas](#roi-e-metricas)
+- [Funcionalidades do Dashboard v6.2](#funcionalidades-do-dashboard-v62)
 - [Instalacao Rapida](#instalacao-rapida)
 - [Documentacao Tecnica](#documentacao-tecnica)
+- [Changelog](#para-mais-detalhes)
 
 ---
 
@@ -328,6 +330,152 @@ Correcao implementada e testada. Pronta para deploy.
 | Custo equivalente | R$ 75.000 | R$ 46.875 |
 | **Economia mensal** | - | **R$ 28.125** |
 | **Economia anual** | - | **R$ 337.500** |
+
+---
+
+## Funcionalidades do Dashboard v6.2
+
+O Dashboard Agile oferece uma experiencia completa de gestao de projetos com recursos avancados de usabilidade.
+
+### Visao Geral da Interface
+
+```
++--------------------------------------------------------------------------------+
+|  FA  Fabrica de Agentes          [Projeto ▼] [Sprint ▼] [🔍 Buscar...] [?] [+] |
++----------------+---------------------------------------------------------------+
+|                |                                                               |
+|   EPICS        |  [Prioridade ▼] [Assignee ▼] [Filtros ativos] 12 stories     |
+|   + Epic 1     |                                                               |
+|   + Epic 2     |  BACKLOG   READY    IN PROGRESS  REVIEW   TESTING   DONE     |
+|                | +--------+--------+------------+--------+---------+--------+ |
+|   SPRINTS      | |STR-001 |STR-003 | STR-005    |        |STR-007  |STR-009 | |
+|   + Sprint 1   | |  5pts  |  8pts  |   13pts    |        |  3pts   |  5pts  | |
+|   + Sprint 2   | |[████░░]|[██████]| [████░░░░] |        |[██████] |[██████]| |
+|                | +--------+--------+------------+--------+---------+--------+ |
+|   ASSISTENTE   |                                                               |
+|   🤖 Chat      |                                                               |
++----------------+---------------------------------------------------------------+
+```
+
+### Busca e Filtros Avancados
+
+| Funcionalidade | Descricao | Atalho |
+|----------------|-----------|--------|
+| **Busca Global** | Filtra por titulo, ID, descricao, persona, acao | `/` |
+| **Filtro Prioridade** | Urgente, Alta, Media, Baixa | - |
+| **Filtro Assignee** | Todos, Sem assignee | - |
+| **Limpar Filtros** | Remove todos os filtros ativos | - |
+| **Contador** | Mostra quantidade de stories filtradas | - |
+
+### Acoes Rapidas nos Cards
+
+Ao passar o mouse sobre um card de story:
+
+```
++---------------------------+
+|  [→] [🗑]    EPIC-01  5pts| <- Quick actions no hover
+|  Login de Usuarios        |
+|  ----------------------   |
+|  [████████░░] 80%         |
+|  4/5 tasks | @joao        |
++---------------------------+
+```
+
+- **[→]** Mover para proxima coluna
+- **[🗑]** Excluir story (com confirmacao)
+
+### Menu de Contexto (Clique Direito)
+
+```
++----------------------+
+| 📋 Abrir detalhes    |
+|----------------------|
+| 1️⃣ Mover p/ Backlog  |
+| 2️⃣ Mover p/ Ready    |
+| 3️⃣ Mover p/ Progress |
+| 4️⃣ Mover p/ Review   |
+| 5️⃣ Mover p/ Testing  |
+| 6️⃣ Mover p/ Done     |
+|----------------------|
+| 📄 Copiar ID         |
+| 🗑️ Excluir          |
++----------------------+
+```
+
+### Atalhos de Teclado
+
+| Categoria | Atalho | Acao |
+|-----------|--------|------|
+| **Navegacao** | `/` | Focar na busca |
+| | `Esc` | Fechar modal/painel |
+| | `?` | Ver atalhos |
+| **Acoes** | `N` | Nova Story |
+| | `T` | Nova Task |
+| | `E` | Editar story |
+| | `Del` | Excluir story |
+| **Mover Story** | `1` | Mover para Backlog |
+| | `2` | Mover para Ready |
+| | `3` | Mover para In Progress |
+| | `4` | Mover para Review |
+| | `5` | Mover para Testing |
+| | `6` | Mover para Done |
+
+### Sistema de Notificacoes
+
+Feedback visual em tempo real para todas as acoes:
+
+| Tipo | Cor | Exemplo |
+|------|-----|---------|
+| **Sucesso** | Verde | "Story criada: STR-0001" |
+| **Erro** | Vermelho | "Erro ao salvar" |
+| **Info** | Azul | "Story movida para Done" |
+| **Alerta** | Amarelo | "Ja esta na ultima coluna" |
+
+### Confirmacao de Acoes Destrutivas
+
+Antes de excluir uma story ou task, o sistema exibe um dialogo de confirmacao:
+
+```
++----------------------------------------+
+|  ⚠️  Excluir Story                      |
+|----------------------------------------|
+|  Tem certeza que deseja excluir?       |
+|  Todas as tasks serao perdidas.        |
+|                                        |
+|  [ STR-0001: Login de Usuarios ]       |
+|                                        |
+|  Esta acao nao pode ser desfeita.      |
+|                                        |
+|          [Cancelar]  [Excluir Story]   |
++----------------------------------------+
+```
+
+### Onboarding para Novos Usuarios
+
+Ao acessar sem projeto selecionado:
+
+```
++------------------------------------------+
+|          🚀 Bem-vindo a Fabrica!          |
+|                                          |
+|  1. Crie ou selecione um projeto         |
+|  2. Adicione User Stories                |
+|  3. Arraste stories pelo Kanban          |
+|  4. Use o chat para comandos             |
+|                                          |
+|  Dica: Pressione [?] para atalhos        |
++------------------------------------------+
+```
+
+### Drag and Drop Melhorado
+
+- Arraste stories entre colunas
+- Feedback visual durante arraste (card elevado e rotacionado)
+- Toast de confirmacao ao soltar
+
+### Para Mais Detalhes
+
+Consulte o [CHANGELOG.md](CHANGELOG.md) para historico completo de versoes e funcionalidades.
 
 ---
 
