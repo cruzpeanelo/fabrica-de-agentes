@@ -1235,6 +1235,133 @@ HTML_TEMPLATE = """
         .markdown-content p { margin-bottom: 0.75rem; }
         .markdown-content ul { list-style: disc; padding-left: 1.5rem; margin-bottom: 0.75rem; }
         .markdown-content code { background: #f3f4f6; padding: 0.125rem 0.25rem; border-radius: 0.25rem; }
+
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .toast {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            animation: slideIn 0.3s ease, fadeOut 0.3s ease 4.7s forwards;
+            min-width: 300px;
+            max-width: 450px;
+        }
+        .toast-success { background: #10B981; color: white; }
+        .toast-error { background: #EF4444; color: white; }
+        .toast-warning { background: #F59E0B; color: white; }
+        .toast-info { background: #3B82F6; color: white; }
+        .toast-icon { font-size: 1.25rem; }
+        .toast-content { flex: 1; }
+        .toast-title { font-weight: 600; font-size: 0.875rem; }
+        .toast-message { font-size: 0.8rem; opacity: 0.9; }
+        .toast-close {
+            background: none;
+            border: none;
+            color: white;
+            opacity: 0.7;
+            cursor: pointer;
+            padding: 4px;
+            font-size: 1.1rem;
+        }
+        .toast-close:hover { opacity: 1; }
+        .toast-undo {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .toast-undo:hover { background: rgba(255,255,255,0.3); }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        /* Search Box */
+        .search-box {
+            position: relative;
+        }
+        .search-box input {
+            padding-left: 36px;
+            transition: all 0.2s;
+        }
+        .search-box input:focus {
+            box-shadow: 0 0 0 3px rgba(0, 59, 74, 0.1);
+        }
+        .search-box .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #9CA3AF;
+        }
+        .search-highlight {
+            background: #FBBF24;
+            padding: 0 2px;
+            border-radius: 2px;
+        }
+
+        /* Confirmation Modal */
+        .confirm-modal {
+            animation: modalIn 0.2s ease;
+        }
+        @keyframes modalIn {
+            from { transform: scale(0.95); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .confirm-danger {
+            background: #FEE2E2;
+            border: 1px solid #FCA5A5;
+        }
+
+        /* Keyboard Shortcuts */
+        .kbd {
+            display: inline-block;
+            padding: 2px 6px;
+            font-size: 0.7rem;
+            font-family: monospace;
+            background: #F3F4F6;
+            border: 1px solid #D1D5DB;
+            border-radius: 4px;
+            box-shadow: 0 1px 0 #D1D5DB;
+        }
+        .shortcuts-modal {
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .shortcut-group { margin-bottom: 16px; }
+        .shortcut-group-title {
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 8px;
+            font-size: 0.875rem;
+        }
+        .shortcut-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            font-size: 0.8rem;
+        }
+        .shortcut-desc { color: #6B7280; }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -1272,6 +1399,28 @@ HTML_TEMPLATE = """
                                 {{ s.name }}
                             </option>
                         </select>
+
+                        <!-- Campo de Busca -->
+                        <div class="search-box" v-if="selectedProjectId">
+                            <svg class="search-icon w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                            </svg>
+                            <input v-model="searchQuery"
+                                   @keyup.escape="searchQuery = ''"
+                                   type="text"
+                                   placeholder="Buscar stories... (pressione /)"
+                                   ref="searchInput"
+                                   class="bg-white/10 text-white placeholder-gray-300 border border-white/20 rounded px-3 py-1.5 text-sm w-56 focus:w-72 transition-all focus:outline-none">
+                        </div>
+
+                        <!-- Atalhos de Teclado -->
+                        <button @click="showShortcutsModal = true"
+                                class="text-white/70 hover:text-white p-2 transition"
+                                title="Atalhos de teclado (?)">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+                            </svg>
+                        </button>
 
                         <!-- Nova Story -->
                         <button @click="showNewStoryModal = true"
@@ -1359,7 +1508,7 @@ HTML_TEMPLATE = """
 
                 <div v-else class="flex gap-4 h-full">
                     <!-- Colunas do Kanban -->
-                    <div v-for="(column, status) in storyBoard" :key="status"
+                    <div v-for="(column, status) in filteredStoryBoard" :key="status"
                          class="flex-shrink-0 w-80 bg-gray-100 rounded-lg">
                         <!-- Header da Coluna -->
                         <div class="p-3 border-b border-gray-200 bg-white rounded-t-lg">
@@ -1573,11 +1722,15 @@ HTML_TEMPLATE = """
                             </div>
                         </div>
 
-                        <!-- Botao Editar -->
-                        <div class="pt-4">
+                        <!-- Botoes de Acao -->
+                        <div class="pt-4 space-y-2">
                             <button @click="editStory"
                                     class="w-full bg-[#003B4A] text-white py-2 rounded-lg hover:bg-opacity-90 transition">
                                 Editar Story
+                            </button>
+                            <button @click="deleteStoryWithConfirm(selectedStory)"
+                                    class="w-full bg-white text-red-600 border border-red-300 py-2 rounded-lg hover:bg-red-50 transition">
+                                Excluir Story
                             </button>
                         </div>
                     </div>
@@ -1594,7 +1747,7 @@ HTML_TEMPLATE = """
 
                         <div v-if="selectedStory.tasks?.length" class="space-y-2">
                             <div v-for="task in selectedStory.tasks" :key="task.task_id"
-                                 class="border border-gray-200 rounded-lg p-3">
+                                 class="border border-gray-200 rounded-lg p-3 hover:border-gray-300 transition">
                                 <div class="flex items-start justify-between">
                                     <div class="flex items-start gap-2">
                                         <input type="checkbox"
@@ -1606,9 +1759,18 @@ HTML_TEMPLATE = """
                                             <div class="text-xs text-gray-500">{{ task.task_id }} | {{ task.task_type }}</div>
                                         </div>
                                     </div>
-                                    <span :class="['text-xs px-2 py-0.5 rounded', getTaskStatusClass(task.status)]">
-                                        {{ task.status }}
-                                    </span>
+                                    <div class="flex items-center gap-2">
+                                        <span :class="['text-xs px-2 py-0.5 rounded', getTaskStatusClass(task.status)]">
+                                            {{ task.status }}
+                                        </span>
+                                        <button @click.stop="deleteTaskWithConfirm(task)"
+                                                class="text-gray-400 hover:text-red-500 transition p-1"
+                                                title="Excluir task">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                            </svg>
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <!-- Output Tecnico -->
@@ -1960,6 +2122,131 @@ HTML_TEMPLATE = """
                 </div>
             </div>
         </div>
+
+        <!-- MODAL: Confirmacao de Exclusao -->
+        <div v-if="showConfirmModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+            <div class="confirm-modal bg-white rounded-lg w-[400px] shadow-xl">
+                <div class="p-4 border-b border-gray-200">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                            <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                            </svg>
+                        </div>
+                        <h2 class="text-lg font-semibold text-gray-900">{{ confirmModal.title }}</h2>
+                    </div>
+                </div>
+                <div class="p-4">
+                    <p class="text-gray-600 text-sm">{{ confirmModal.message }}</p>
+                    <div v-if="confirmModal.itemName" class="mt-3 p-3 confirm-danger rounded-lg">
+                        <span class="font-medium text-red-800">{{ confirmModal.itemName }}</span>
+                    </div>
+                    <p class="mt-3 text-xs text-gray-500">Esta acao nao pode ser desfeita.</p>
+                </div>
+                <div class="p-4 border-t border-gray-200 flex justify-end gap-3">
+                    <button @click="cancelConfirm"
+                            class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition">
+                        Cancelar
+                    </button>
+                    <button @click="executeConfirm"
+                            class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
+                        {{ confirmModal.confirmText || 'Excluir' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL: Atalhos de Teclado -->
+        <div v-if="showShortcutsModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center"
+             @click.self="showShortcutsModal = false">
+            <div class="bg-white rounded-lg w-[500px] shadow-xl shortcuts-modal">
+                <div class="p-4 border-b border-gray-200 flex justify-between items-center">
+                    <h2 class="text-lg font-semibold">Atalhos de Teclado</h2>
+                    <button @click="showShortcutsModal = false" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-4">
+                    <div class="shortcut-group">
+                        <div class="shortcut-group-title">Navegacao</div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Focar no campo de busca</span>
+                            <span class="kbd">/</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Fechar modal/painel</span>
+                            <span class="kbd">Esc</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Mostrar atalhos</span>
+                            <span class="kbd">?</span>
+                        </div>
+                    </div>
+                    <div class="shortcut-group">
+                        <div class="shortcut-group-title">Acoes</div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Nova Story</span>
+                            <span class="kbd">N</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Nova Task (com story aberta)</span>
+                            <span class="kbd">T</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Editar story selecionada</span>
+                            <span class="kbd">E</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Deletar story selecionada</span>
+                            <span class="kbd">Del</span>
+                        </div>
+                    </div>
+                    <div class="shortcut-group">
+                        <div class="shortcut-group-title">Mover Story</div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Mover para Backlog</span>
+                            <span class="kbd">1</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Mover para Ready</span>
+                            <span class="kbd">2</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Mover para In Progress</span>
+                            <span class="kbd">3</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Mover para Review</span>
+                            <span class="kbd">4</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Mover para Testing</span>
+                            <span class="kbd">5</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-desc">Mover para Done</span>
+                            <span class="kbd">6</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TOAST CONTAINER -->
+        <div class="toast-container">
+            <div v-for="toast in toasts" :key="toast.id"
+                 :class="['toast', 'toast-' + toast.type]">
+                <span class="toast-icon">{{ getToastIcon(toast.type) }}</span>
+                <div class="toast-content">
+                    <div class="toast-title">{{ toast.title }}</div>
+                    <div v-if="toast.message" class="toast-message">{{ toast.message }}</div>
+                </div>
+                <button v-if="toast.undoAction" @click="handleUndo(toast)" class="toast-undo">Desfazer</button>
+                <button @click="removeToast(toast.id)" class="toast-close">&times;</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -1981,12 +2268,31 @@ HTML_TEMPLATE = """
             const chatInput = ref('');
             const chatMessages = ref(null);
 
+            // Search
+            const searchQuery = ref('');
+            const searchInput = ref(null);
+
+            // Toast Notifications
+            const toasts = ref([]);
+            let toastId = 0;
+
+            // Confirm Modal
+            const showConfirmModal = ref(false);
+            const confirmModal = ref({
+                title: '',
+                message: '',
+                itemName: '',
+                confirmText: 'Excluir',
+                onConfirm: null
+            });
+
             // Modals
             const showNewStoryModal = ref(false);
             const showNewTaskModal = ref(false);
             const showNewEpicModal = ref(false);
             const showNewSprintModal = ref(false);
             const showNewDocModal = ref(false);
+            const showShortcutsModal = ref(false);
 
             // Form data
             const newStory = ref({
@@ -2016,6 +2322,25 @@ HTML_TEMPLATE = """
                     col.forEach(s => points += s.story_points || 0);
                 });
                 return points;
+            });
+
+            // Filtered Story Board (for search)
+            const filteredStoryBoard = computed(() => {
+                if (!searchQuery.value.trim()) {
+                    return storyBoard.value;
+                }
+                const query = searchQuery.value.toLowerCase().trim();
+                const filtered = {};
+                Object.keys(storyBoard.value).forEach(status => {
+                    filtered[status] = storyBoard.value[status].filter(story => {
+                        return story.title?.toLowerCase().includes(query) ||
+                               story.story_id?.toLowerCase().includes(query) ||
+                               story.description?.toLowerCase().includes(query) ||
+                               story.persona?.toLowerCase().includes(query) ||
+                               story.action?.toLowerCase().includes(query);
+                    });
+                });
+                return filtered;
             });
 
             // Methods
@@ -2058,13 +2383,18 @@ HTML_TEMPLATE = """
                                 const newStatus = evt.to.id.replace('column-', '');
                                 const newOrder = evt.newIndex;
 
-                                await fetch(`/api/stories/${storyId}/move`, {
-                                    method: 'PATCH',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ status: newStatus, order: newOrder })
-                                });
-
-                                loadProjectData();
+                                try {
+                                    await fetch(`/api/stories/${storyId}/move`, {
+                                        method: 'PATCH',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ status: newStatus, order: newOrder })
+                                    });
+                                    addToast('success', 'Story movida', storyId + ' -> ' + getColumnTitle(newStatus));
+                                    loadProjectData();
+                                } catch (e) {
+                                    addToast('error', 'Erro ao mover', 'Nao foi possivel mover a story');
+                                    loadProjectData();
+                                }
                             }
                         });
                     }
@@ -2099,39 +2429,57 @@ HTML_TEMPLATE = """
             };
 
             const createStory = async () => {
-                const storyData = { ...newStory.value, project_id: selectedProjectId.value };
-                if (newStoryCriteria.value) {
-                    storyData.acceptance_criteria = newStoryCriteria.value.split('\\n').filter(c => c.trim());
+                try {
+                    const storyData = { ...newStory.value, project_id: selectedProjectId.value };
+                    if (newStoryCriteria.value) {
+                        storyData.acceptance_criteria = newStoryCriteria.value.split('\\n').filter(c => c.trim());
+                    }
+
+                    const res = await fetch('/api/stories', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(storyData)
+                    });
+
+                    if (res.ok) {
+                        const created = await res.json();
+                        addToast('success', 'Story criada', created.story_id + ': ' + created.title);
+                    }
+
+                    showNewStoryModal.value = false;
+                    newStory.value = { title: '', description: '', persona: '', action: '', benefit: '',
+                        story_points: 3, priority: 'medium', complexity: 'medium', category: 'feature',
+                        epic_id: '', sprint_id: '' };
+                    newStoryCriteria.value = '';
+                    loadProjectData();
+                } catch (e) {
+                    addToast('error', 'Erro ao criar story', 'Verifique os dados e tente novamente');
                 }
-
-                await fetch('/api/stories', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(storyData)
-                });
-
-                showNewStoryModal.value = false;
-                newStory.value = { title: '', description: '', persona: '', action: '', benefit: '',
-                    story_points: 3, priority: 'medium', complexity: 'medium', category: 'feature',
-                    epic_id: '', sprint_id: '' };
-                newStoryCriteria.value = '';
-                loadProjectData();
             };
 
             const createTask = async () => {
-                await fetch(`/api/stories/${selectedStory.value.story_id}/tasks`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ...newTask.value, story_id: selectedStory.value.story_id })
-                });
+                try {
+                    const res = await fetch(`/api/stories/${selectedStory.value.story_id}/tasks`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ...newTask.value, story_id: selectedStory.value.story_id })
+                    });
 
-                showNewTaskModal.value = false;
-                newTask.value = { title: '', description: '', task_type: 'development', estimated_hours: 0 };
+                    if (res.ok) {
+                        const created = await res.json();
+                        addToast('success', 'Task criada', created.task_id + ': ' + created.title);
+                    }
 
-                // Reload story
-                const res = await fetch(`/api/stories/${selectedStory.value.story_id}`);
-                selectedStory.value = await res.json();
-                loadProjectData();
+                    showNewTaskModal.value = false;
+                    newTask.value = { title: '', description: '', task_type: 'development', estimated_hours: 0 };
+
+                    // Reload story
+                    const storyRes = await fetch(`/api/stories/${selectedStory.value.story_id}`);
+                    selectedStory.value = await storyRes.json();
+                    loadProjectData();
+                } catch (e) {
+                    addToast('error', 'Erro ao criar task', 'Verifique os dados e tente novamente');
+                }
             };
 
             const toggleTaskComplete = async (task) => {
@@ -2145,60 +2493,98 @@ HTML_TEMPLATE = """
                 const res = await fetch(`/api/stories/${selectedStory.value.story_id}`);
                 selectedStory.value = await res.json();
                 loadProjectData();
+
+                if (newStatus === 'completed') {
+                    addToast('success', 'Task completa', task.title);
+                } else {
+                    addToast('info', 'Task reaberta', task.title);
+                }
             };
 
             const createEpic = async () => {
-                await fetch('/api/epics', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ...newEpic.value, project_id: selectedProjectId.value })
-                });
-                showNewEpicModal.value = false;
-                newEpic.value = { title: '', description: '', color: '#003B4A' };
-                loadProjectData();
+                try {
+                    const res = await fetch('/api/epics', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ...newEpic.value, project_id: selectedProjectId.value })
+                    });
+                    if (res.ok) {
+                        const created = await res.json();
+                        addToast('success', 'Epic criado', created.title);
+                    }
+                    showNewEpicModal.value = false;
+                    newEpic.value = { title: '', description: '', color: '#003B4A' };
+                    loadProjectData();
+                } catch (e) {
+                    addToast('error', 'Erro ao criar epic', 'Verifique os dados e tente novamente');
+                }
             };
 
             const createSprint = async () => {
-                await fetch('/api/sprints', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ...newSprint.value, project_id: selectedProjectId.value })
-                });
-                showNewSprintModal.value = false;
-                newSprint.value = { name: '', goal: '', capacity: 0 };
-                loadProjectData();
+                try {
+                    const res = await fetch('/api/sprints', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ...newSprint.value, project_id: selectedProjectId.value })
+                    });
+                    if (res.ok) {
+                        const created = await res.json();
+                        addToast('success', 'Sprint criado', created.name);
+                    }
+                    showNewSprintModal.value = false;
+                    newSprint.value = { name: '', goal: '', capacity: 0 };
+                    loadProjectData();
+                } catch (e) {
+                    addToast('error', 'Erro ao criar sprint', 'Verifique os dados e tente novamente');
+                }
             };
 
             const createDoc = async () => {
-                await fetch(`/api/stories/${selectedStory.value.story_id}/docs`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ...newDoc.value, story_id: selectedStory.value.story_id })
-                });
-                showNewDocModal.value = false;
-                newDoc.value = { title: '', doc_type: 'technical', content: '', test_instructions: '' };
+                try {
+                    const res = await fetch(`/api/stories/${selectedStory.value.story_id}/docs`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ...newDoc.value, story_id: selectedStory.value.story_id })
+                    });
+                    if (res.ok) {
+                        const created = await res.json();
+                        addToast('success', 'Documentacao criada', created.title);
+                    }
+                    showNewDocModal.value = false;
+                    newDoc.value = { title: '', doc_type: 'technical', content: '', test_instructions: '' };
 
-                const res = await fetch(`/api/stories/${selectedStory.value.story_id}`);
-                selectedStory.value = await res.json();
+                    const storyRes = await fetch(`/api/stories/${selectedStory.value.story_id}`);
+                    selectedStory.value = await storyRes.json();
+                } catch (e) {
+                    addToast('error', 'Erro ao criar documentacao', 'Verifique os dados e tente novamente');
+                }
             };
 
             const editStory = () => {
                 // TODO: Implement edit modal
-                alert('Funcionalidade de edicao em desenvolvimento');
+                addToast('info', 'Em desenvolvimento', 'Funcionalidade de edicao em breve');
             };
 
             const uploadFile = async (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
 
-                const formData = new FormData();
-                formData.append('file', file);
-                formData.append('story_id', selectedStory.value.story_id);
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('story_id', selectedStory.value.story_id);
 
-                await fetch('/api/upload', { method: 'POST', body: formData });
+                    const res = await fetch('/api/upload', { method: 'POST', body: formData });
 
-                const res = await fetch(`/api/stories/${selectedStory.value.story_id}`);
-                selectedStory.value = await res.json();
+                    if (res.ok) {
+                        addToast('success', 'Arquivo enviado', file.name);
+                    }
+
+                    const storyRes = await fetch(`/api/stories/${selectedStory.value.story_id}`);
+                    selectedStory.value = await storyRes.json();
+                } catch (e) {
+                    addToast('error', 'Erro no upload', 'Nao foi possivel enviar o arquivo');
+                }
             };
 
             const filterByEpic = (epicId) => {
@@ -2299,6 +2685,198 @@ HTML_TEMPLATE = """
                 return marked.parse(text);
             };
 
+            // Toast Functions
+            const addToast = (type, title, message = '', undoAction = null) => {
+                const id = ++toastId;
+                toasts.value.push({ id, type, title, message, undoAction });
+                setTimeout(() => removeToast(id), 5000);
+                return id;
+            };
+
+            const removeToast = (id) => {
+                const idx = toasts.value.findIndex(t => t.id === id);
+                if (idx !== -1) toasts.value.splice(idx, 1);
+            };
+
+            const getToastIcon = (type) => {
+                const icons = {
+                    success: '✓',
+                    error: '✕',
+                    warning: '⚠',
+                    info: 'ℹ'
+                };
+                return icons[type] || 'ℹ';
+            };
+
+            const handleUndo = async (toast) => {
+                if (toast.undoAction) {
+                    await toast.undoAction();
+                    removeToast(toast.id);
+                    addToast('info', 'Acao desfeita');
+                }
+            };
+
+            // Confirm Modal Functions
+            const showConfirm = (title, message, itemName, confirmText, onConfirm) => {
+                confirmModal.value = { title, message, itemName, confirmText, onConfirm };
+                showConfirmModal.value = true;
+            };
+
+            const cancelConfirm = () => {
+                showConfirmModal.value = false;
+                confirmModal.value = { title: '', message: '', itemName: '', confirmText: 'Excluir', onConfirm: null };
+            };
+
+            const executeConfirm = async () => {
+                if (confirmModal.value.onConfirm) {
+                    await confirmModal.value.onConfirm();
+                }
+                cancelConfirm();
+            };
+
+            // Delete Functions with Confirmation
+            const deleteStoryWithConfirm = (story) => {
+                showConfirm(
+                    'Excluir Story',
+                    'Tem certeza que deseja excluir esta story? Todas as tasks e documentos associados serao perdidos.',
+                    story.story_id + ': ' + story.title,
+                    'Excluir Story',
+                    async () => {
+                        try {
+                            const res = await fetch('/api/stories/' + story.story_id, { method: 'DELETE' });
+                            if (res.ok) {
+                                addToast('success', 'Story excluida', story.story_id + ' foi removida');
+                                selectedStory.value = null;
+                                loadProjectData();
+                            } else {
+                                addToast('error', 'Erro ao excluir', 'Nao foi possivel excluir a story');
+                            }
+                        } catch (e) {
+                            addToast('error', 'Erro de conexao', 'Verifique sua conexao');
+                        }
+                    }
+                );
+            };
+
+            const deleteTaskWithConfirm = (task) => {
+                showConfirm(
+                    'Excluir Task',
+                    'Tem certeza que deseja excluir esta task?',
+                    task.task_id + ': ' + task.title,
+                    'Excluir Task',
+                    async () => {
+                        try {
+                            const res = await fetch('/api/story-tasks/' + task.task_id, { method: 'DELETE' });
+                            if (res.ok) {
+                                addToast('success', 'Task excluida', task.task_id + ' foi removida');
+                                // Reload story
+                                const storyRes = await fetch('/api/stories/' + selectedStory.value.story_id);
+                                selectedStory.value = await storyRes.json();
+                                loadProjectData();
+                            } else {
+                                addToast('error', 'Erro ao excluir', 'Nao foi possivel excluir a task');
+                            }
+                        } catch (e) {
+                            addToast('error', 'Erro de conexao', 'Verifique sua conexao');
+                        }
+                    }
+                );
+            };
+
+            // Keyboard Shortcuts
+            const handleKeyboard = (e) => {
+                // Ignore if in input/textarea
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+                    if (e.key === 'Escape') {
+                        e.target.blur();
+                        searchQuery.value = '';
+                    }
+                    return;
+                }
+
+                // Escape - close modals
+                if (e.key === 'Escape') {
+                    if (showConfirmModal.value) { cancelConfirm(); return; }
+                    if (showShortcutsModal.value) { showShortcutsModal.value = false; return; }
+                    if (showNewStoryModal.value) { showNewStoryModal.value = false; return; }
+                    if (showNewTaskModal.value) { showNewTaskModal.value = false; return; }
+                    if (showNewEpicModal.value) { showNewEpicModal.value = false; return; }
+                    if (showNewSprintModal.value) { showNewSprintModal.value = false; return; }
+                    if (showNewDocModal.value) { showNewDocModal.value = false; return; }
+                    if (selectedStory.value) { selectedStory.value = null; return; }
+                    searchQuery.value = '';
+                }
+
+                // / - focus search
+                if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    if (searchInput.value) searchInput.value.focus();
+                    return;
+                }
+
+                // ? - show shortcuts
+                if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+                    e.preventDefault();
+                    showShortcutsModal.value = true;
+                    return;
+                }
+
+                // n - new story
+                if (e.key === 'n' && selectedProjectId.value && !e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    showNewStoryModal.value = true;
+                    return;
+                }
+
+                // t - new task (with story open)
+                if (e.key === 't' && selectedStory.value && !e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    showNewTaskModal.value = true;
+                    return;
+                }
+
+                // e - edit story
+                if (e.key === 'e' && selectedStory.value && !e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    editStory();
+                    return;
+                }
+
+                // Delete - delete story
+                if ((e.key === 'Delete' || e.key === 'Backspace') && selectedStory.value && !e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    deleteStoryWithConfirm(selectedStory.value);
+                    return;
+                }
+
+                // 1-6 - move story to column
+                if (selectedStory.value && ['1','2','3','4','5','6'].includes(e.key)) {
+                    e.preventDefault();
+                    const statuses = ['backlog', 'ready', 'in_progress', 'review', 'testing', 'done'];
+                    const newStatus = statuses[parseInt(e.key) - 1];
+                    moveStoryToStatus(selectedStory.value, newStatus);
+                    return;
+                }
+            };
+
+            // Move story to status (for keyboard shortcuts)
+            const moveStoryToStatus = async (story, newStatus) => {
+                try {
+                    await fetch('/api/stories/' + story.story_id + '/move', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: newStatus })
+                    });
+                    addToast('success', 'Story movida', story.story_id + ' -> ' + getColumnTitle(newStatus));
+                    loadProjectData();
+                    // Update selected story
+                    const res = await fetch('/api/stories/' + story.story_id);
+                    selectedStory.value = await res.json();
+                } catch (e) {
+                    addToast('error', 'Erro ao mover', 'Nao foi possivel mover a story');
+                }
+            };
+
             // Watch project change
             watch(selectedProjectId, () => {
                 loadChatHistory();
@@ -2307,6 +2885,9 @@ HTML_TEMPLATE = """
             // Init
             onMounted(() => {
                 loadProjects();
+
+                // Setup keyboard shortcuts
+                document.addEventListener('keydown', handleKeyboard);
 
                 // Welcome message
                 chatHistory.value.push({
@@ -2322,13 +2903,17 @@ HTML_TEMPLATE = """
                 storyBoard, epics, sprints, selectedStory, activeTab,
                 chatHistory, chatInput, chatMessages,
                 showNewStoryModal, showNewTaskModal, showNewEpicModal, showNewSprintModal, showNewDocModal,
+                showShortcutsModal, showConfirmModal, confirmModal,
                 newStory, newStoryCriteria, newTask, newEpic, newSprint, newDoc,
                 totalStories, doneStories, inProgressStories, totalPoints,
+                filteredStoryBoard, searchQuery, searchInput, toasts,
                 loadProjectData, getColumnTitle, getColumnPoints, getEpicName,
                 openStoryDetail, createStory, createTask, toggleTaskComplete,
                 createEpic, createSprint, createDoc, editStory, uploadFile, filterByEpic,
                 sendMessage, getTaskStatusClass, getDocTypeClass,
-                formatTime, formatFileSize, renderMarkdown
+                formatTime, formatFileSize, renderMarkdown,
+                addToast, removeToast, getToastIcon, handleUndo,
+                cancelConfirm, executeConfirm, deleteStoryWithConfirm, deleteTaskWithConfirm
             };
         }
     }).mount('#app');
