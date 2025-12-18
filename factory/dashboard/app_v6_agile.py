@@ -1681,13 +1681,66 @@ HTML_TEMPLATE = """
             <!-- MAIN CONTENT - KANBAN -->
             <main class="flex-1 overflow-x-auto bg-gray-50 p-4">
                 <div v-if="!selectedProjectId" class="flex items-center justify-center h-full text-gray-500">
-                    <div class="text-center">
-                        <div class="text-6xl mb-4">📋</div>
-                        <div class="text-xl">Selecione um projeto para ver o Kanban</div>
+                    <div class="text-center max-w-md">
+                        <div class="text-6xl mb-4">🚀</div>
+                        <h2 class="text-xl font-semibold text-gray-700 mb-2">Bem-vindo a Fabrica de Agentes!</h2>
+                        <p class="text-gray-500 mb-6">Selecione um projeto na barra lateral ou crie um novo para comecar.</p>
+                        <div class="space-y-3 text-left bg-white p-4 rounded-lg shadow-sm">
+                            <div class="flex items-center gap-3 text-sm">
+                                <span class="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-semibold">1</span>
+                                <span>Crie ou selecione um projeto</span>
+                            </div>
+                            <div class="flex items-center gap-3 text-sm">
+                                <span class="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-semibold">2</span>
+                                <span>Adicione User Stories com narrativa Agile</span>
+                            </div>
+                            <div class="flex items-center gap-3 text-sm">
+                                <span class="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-semibold">3</span>
+                                <span>Arraste stories pelo Kanban</span>
+                            </div>
+                            <div class="flex items-center gap-3 text-sm">
+                                <span class="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-semibold">4</span>
+                                <span>Use o chat para comandos rapidos</span>
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-4">Dica: Pressione <span class="kbd">?</span> para ver atalhos de teclado</p>
                     </div>
                 </div>
 
-                <div v-else class="flex gap-4 h-full">
+                <div v-else class="flex flex-col h-full">
+                    <!-- Barra de Filtros -->
+                    <div class="flex items-center gap-3 mb-4 flex-wrap">
+                        <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg shadow-sm">
+                            <span class="text-xs text-gray-500">Prioridade:</span>
+                            <select v-model="filterPriority" class="text-sm border-0 bg-transparent focus:ring-0 cursor-pointer">
+                                <option value="">Todas</option>
+                                <option value="urgent">Urgente</option>
+                                <option value="high">Alta</option>
+                                <option value="medium">Media</option>
+                                <option value="low">Baixa</option>
+                            </select>
+                        </div>
+                        <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg shadow-sm">
+                            <span class="text-xs text-gray-500">Assignee:</span>
+                            <select v-model="filterAssignee" class="text-sm border-0 bg-transparent focus:ring-0 cursor-pointer">
+                                <option value="">Todos</option>
+                                <option value="unassigned">Sem assignee</option>
+                            </select>
+                        </div>
+                        <div v-if="searchQuery || filterPriority || filterAssignee"
+                             class="flex items-center gap-2 text-xs text-gray-500">
+                            <span class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                                Filtros ativos
+                            </span>
+                            <button @click="clearFilters" class="text-gray-400 hover:text-gray-600">
+                                Limpar
+                            </button>
+                        </div>
+                        <div class="ml-auto text-xs text-gray-500">
+                            {{ filteredStoriesCount }} stories
+                        </div>
+                    </div>
+
                     <!-- Colunas do Kanban -->
                     <div v-for="(column, status) in filteredStoryBoard" :key="status"
                          class="flex-shrink-0 w-80 bg-gray-100 rounded-lg">
@@ -2500,9 +2553,11 @@ HTML_TEMPLATE = """
             const chatInput = ref('');
             const chatMessages = ref(null);
 
-            // Search
+            // Search & Filters
             const searchQuery = ref('');
             const searchInput = ref(null);
+            const filterPriority = ref('');
+            const filterAssignee = ref('');
 
             // Toast Notifications
             const toasts = ref([]);
@@ -2567,24 +2622,48 @@ HTML_TEMPLATE = """
                 return points;
             });
 
-            // Filtered Story Board (for search)
+            // Filtered Story Board (for search and filters)
             const filteredStoryBoard = computed(() => {
-                if (!searchQuery.value.trim()) {
+                const hasFilters = searchQuery.value.trim() || filterPriority.value || filterAssignee.value;
+                if (!hasFilters) {
                     return storyBoard.value;
                 }
                 const query = searchQuery.value.toLowerCase().trim();
                 const filtered = {};
                 Object.keys(storyBoard.value).forEach(status => {
                     filtered[status] = storyBoard.value[status].filter(story => {
-                        return story.title?.toLowerCase().includes(query) ||
-                               story.story_id?.toLowerCase().includes(query) ||
-                               story.description?.toLowerCase().includes(query) ||
-                               story.persona?.toLowerCase().includes(query) ||
-                               story.action?.toLowerCase().includes(query);
+                        // Search filter
+                        const matchesSearch = !query ||
+                            story.title?.toLowerCase().includes(query) ||
+                            story.story_id?.toLowerCase().includes(query) ||
+                            story.description?.toLowerCase().includes(query) ||
+                            story.persona?.toLowerCase().includes(query) ||
+                            story.action?.toLowerCase().includes(query);
+                        // Priority filter
+                        const matchesPriority = !filterPriority.value || story.priority === filterPriority.value;
+                        // Assignee filter
+                        const matchesAssignee = !filterAssignee.value ||
+                            (filterAssignee.value === 'unassigned' && !story.assignee) ||
+                            (story.assignee === filterAssignee.value);
+                        return matchesSearch && matchesPriority && matchesAssignee;
                     });
                 });
                 return filtered;
             });
+
+            // Filtered stories count
+            const filteredStoriesCount = computed(() => {
+                let count = 0;
+                Object.values(filteredStoryBoard.value).forEach(col => count += col.length);
+                return count;
+            });
+
+            // Clear all filters
+            const clearFilters = () => {
+                searchQuery.value = '';
+                filterPriority.value = '';
+                filterAssignee.value = '';
+            };
 
             // Methods
             const loadProjects = async () => {
@@ -3210,7 +3289,8 @@ HTML_TEMPLATE = """
                 contextMenu, isLoading,
                 newStory, newStoryCriteria, newTask, newEpic, newSprint, newDoc,
                 totalStories, doneStories, inProgressStories, totalPoints,
-                filteredStoryBoard, searchQuery, searchInput, toasts,
+                filteredStoryBoard, filteredStoriesCount, searchQuery, searchInput, toasts,
+                filterPriority, filterAssignee, clearFilters,
                 loadProjectData, getColumnTitle, getColumnPoints, getEpicName,
                 openStoryDetail, createStory, createTask, toggleTaskComplete,
                 createEpic, createSprint, createDoc, editStory, uploadFile, filterByEpic,
